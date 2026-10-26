@@ -1,0 +1,23 @@
+# Repo-wide ignores. Build output and tool-specific files for each
+# project live in backend/.gitignore and frontend/.gitignore.
+
+# OS
+.DS_Store
+Thumbs.db
+
+# JetBrains
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# VS Code at the repo root (frontend/.vscode keeps its own shared files)
+/.vscode/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Claude Code per-user settings
+.claude/settings.local.json
