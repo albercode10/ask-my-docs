@@ -9,7 +9,7 @@ ask-my-docs is a RAG ("ask questions about your documents") app, currently at th
 - `backend/` — Spring Boot 4.1 + Spring AI 2.0 (`spring-ai-starter-model-ollama`, Spring MVC), Java 21, Maven 3.10 via wrapper. Package root `com.alber.backend`.
 - `frontend/` — Angular 22 standalone app (no NgModules, signals, `@angular/build` application builder), SCSS, Vitest for unit tests. Node `^22.22.3 || ^24.15.0 || >=26`.
 
-The backend talks to a **local Ollama** instance (`spring.ai.ollama.base-url=http://localhost:11434`, chat model `qwen3:8b`, in `backend/src/main/resources/application.properties`). Ollama must be running with the model pulled before the backend starts or the context-load test runs:
+The backend talks to a **local Ollama** instance (`spring.ai.ollama.base-url=http://localhost:11434`, chat model `qwen3:8b`, in `backend/src/main/resources/application.properties`). Ollama must be running with the model pulled for the backend to answer chat requests. The backend starts and `./mvnw test` passes without it. Pull the model once:
 
 ```bash
 ollama pull qwen3:8b

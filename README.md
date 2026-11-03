@@ -49,7 +49,7 @@ cd backend && ./mvnw test
 cd frontend && npm test
 ```
 
-The backend context-load test needs Ollama running.
+The tests don't need Ollama: the backend context starts without it. Ollama is only needed to answer chat requests.
 
 ## Project tracking
 
