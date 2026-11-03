@@ -51,6 +51,10 @@ Work is tracked in Linear: team `ALB`, project `ask-my-docs` (`P-ALB-1`), 2-week
 - Branch from `main` using the issue's Linear branch name (`albercode10/alb-<N>-<slug>`).
 - Reference the issue in the PR description with `Fixes ALB-<N>` so the Linear–GitHub integration links and closes it.
 - Design and tooling decisions live in the Linear issues; read the issue before starting work on it.
+- Deliver tickets with `/feature ALB-<N>` (the developer's user-level skill, not in this repo): approved plan → failing tests → implementation → `.http` requests → fresh-eyes review. `ALB-<N>` keys are Linear issues. The approved plan lives in `docs/plans/ALB-<N>.md`; when it changes, update it and the tests before the code.
+- Every new or changed endpoint comes with tests and a request file in `backend/http/` (IntelliJ HTTP Client, `{{baseUrl}}` from `http-client.env.json`).
+- `./mvnw test` never calls real Ollama: stub `ChatModel` / `EmbeddingModel` with `@MockitoBean`. Real model behavior is checked through the `.http` files.
+- Don't commit, push or open a PR until the developer asks.
 
 ## Planned
 
