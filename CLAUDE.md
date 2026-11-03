@@ -46,8 +46,21 @@ npx prettier --write .                            # format
 
 ## Workflow
 
-[ADD: Linear workflow — team key, project, milestones, cycle cadence, branch naming and `Fixes ALB-N` PR convention. Not verified: the Linear connector was not authenticated when this was written.]
+Work is tracked in Linear: team `ALB`, project `ask-my-docs` (`P-ALB-1`), 2-week cycles. Milestones, in order: **Foundations** (repo hygiene, local dev setup, backend–frontend wiring) → **RAG MVP** (ingestion, embeddings, vector store, ask endpoint) → **Chat UI** (upload and chat pages, streamed answers with sources) → **Polish** (tests, RAG evaluation, observability, demo).
+
+- Branch from `main` using the issue's Linear branch name (`albercode10/alb-<N>-<slug>`).
+- Reference the issue in the PR description with `Fixes ALB-<N>` so the Linear–GitHub integration links and closes it.
+- Design and tooling decisions live in the Linear issues; read the issue before starting work on it.
 
 ## Planned
 
-[ADD: tooling decided in Linear tickets but not yet in the repo (database, formatter/linters, CI, E2E tests, observability). Not verified: Linear was unavailable.]
+Decided in Linear but not in the repo yet — do not assume these exist:
+
+- Postgres + pgvector via Docker Compose for local dev; Ollama stays native on the host (ALB-6, ALB-10).
+- Pinned tool versions: SDKMAN for Java 21, a Node version file (ALB-25).
+- Spotless for Java, ESLint + Prettier for Angular, enforced in CI (ALB-26); GitHub Actions CI (ALB-8).
+- gitleaks pre-commit hook and CI scan (ALB-28); Dependabot (ALB-27).
+- Backend `/health` endpoint, CORS and Angular dev proxy (ALB-7).
+- Testcontainers integration tests (ALB-16), Playwright E2E (ALB-29), RAG evaluation set (ALB-17).
+- Observability: Grafana `otel-lgtm` in Docker Compose, OTLP export, Spring AI observations, Grafana MCP (ALB-18–22); optional Langfuse (ALB-23).
+- Docs-as-code in the repo plus Linear Docs for planning (ALB-24).

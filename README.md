@@ -53,7 +53,14 @@ The backend context-load test needs Ollama running.
 
 ## Project tracking
 
-[ADD: Linear team, project and milestones — not verified when this README was written.]
+Work is planned in Linear (team `ALB`, project `ask-my-docs`) in 2-week cycles, across four milestones:
+
+1. **Foundations** — repo hygiene, local dev setup, backend–frontend wiring
+2. **RAG MVP** — document ingestion, embeddings, pgvector store, ask endpoint with cited sources
+3. **Chat UI** — upload and chat pages with streamed answers and sources
+4. **Polish** — integration and E2E tests, answer-quality evaluation, observability, demo
+
+Branches use the Linear branch name of their issue, and PRs reference it with `Fixes ALB-<N>`.
 
 ## Contributing with Claude Code
 
