@@ -48,7 +48,7 @@ npx prettier --write .                            # format
 
 Work is tracked in Linear: team `ALB`, project `ask-my-docs` (`P-ALB-1`), 2-week cycles. Milestones, in order: **Foundations** (repo hygiene, local dev setup, backend–frontend wiring) → **RAG MVP** (ingestion, embeddings, vector store, ask endpoint) → **Chat UI** (upload and chat pages, streamed answers with sources) → **Polish** (tests, RAG evaluation, observability, demo).
 
-- Branch from `main` using the issue's Linear branch name (`albercode10/alb-<N>-<slug>`).
+- Each issue gets its own branch from an up-to-date `main`, named with the issue's Linear branch name (`albercode10/alb-<N>-<slug>`). `/feature` creates it right after the plan is approved; don't create it by hand beforehand.
 - Reference the issue in the PR description with `Fixes ALB-<N>` so the Linear–GitHub integration links and closes it.
 - Design and tooling decisions live in the Linear issues; read the issue before starting work on it.
 - Deliver tickets with `/feature ALB-<N>` (the developer's user-level skill, not in this repo): approved plan → failing tests → implementation → `.http` requests → fresh-eyes review. `ALB-<N>` keys are Linear issues. The approved plan lives in `docs/plans/ALB-<N>.md`; when it changes, update it and the tests before the code.
