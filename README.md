@@ -14,8 +14,8 @@ Ask questions about your documents and get answers grounded in them, using a loc
 
 ## Prerequisites
 
-- Java 21 (Maven comes with the wrapper, `./mvnw`)
-- Node `^22.22.3 || ^24.15.0 || >=26` and npm
+- Java 21 (Temurin), pinned in [`.sdkmanrc`](.sdkmanrc). Maven comes with the wrapper, `./mvnw`. The backend build fails on any other Java version.
+- Node 26, pinned in [`frontend/.nvmrc`](frontend/.nvmrc), with the npm it bundles
 - [Ollama](https://ollama.com) running locally, with the model pulled:
 
   ```bash
@@ -29,6 +29,30 @@ After cloning, turn on the repo's git hooks once:
 ```bash
 git config core.hooksPath .githooks
 ```
+
+### Java and Node versions
+
+The repo pins its Java and Node versions in files that the build CI (ALB-8, planned) will also read. Java comes from [SDKMAN](https://sdkman.io). Install it once:
+
+```bash
+curl -s "https://get.sdkman.io" | bash
+```
+
+Turn on auto-switching, so `cd` into the repo selects the pinned JDK: set `sdkman_auto_env=true` in `~/.sdkman/etc/config`, then open a new terminal. SDKMAN only looks for `.sdkmanrc` in the directory you `cd` into, so enter the repo at its root; the JDK stays selected in subfolders. A terminal opened directly in `backend/` keeps your default JDK: run `cd ..` and come back, or `sdk env` from the root. Then, at the repo root, install the pinned JDK:
+
+```bash
+sdk env install
+```
+
+Node comes from [nvm](https://github.com/nvm-sh/nvm) (or [fnm](https://github.com/Schniz/fnm), which reads the same file). In `frontend/`:
+
+```bash
+nvm install
+```
+
+Run `nvm use` in `frontend/` in each new terminal, or set up nvm's [deeper shell integration](https://github.com/nvm-sh/nvm#deeper-shell-integration) (or `fnm env --use-on-cd`) to switch on `cd`.
+
+To bump a version, change `.sdkmanrc` or `frontend/.nvmrc`. Bump `.sdkmanrc` when a new Temurin 21 patch comes out, to pick up its security fixes.
 
 ## Running
 
