@@ -37,10 +37,19 @@ npx ng test --watch=false --include app/app.spec.ts   # single spec; path is rel
 npx prettier --write .                            # format
 ```
 
+Repo root:
+
+```bash
+git config core.hooksPath .githooks   # once per clone: enables the gitleaks pre-commit hook
+sh scripts/test-gitleaks-hook.sh      # tests for the hook, the CI scan script and .env setup (CI runs them too)
+sh scripts/gitleaks-scan-history.sh   # scan the full history for secrets (what CI runs)
+```
+
 ## Conventions
 
 - Lombok is on the annotation-processor path for both main and test compilation.
 - Frontend: Prettier (`printWidth` 100, single quotes, Angular parser for HTML) and `.editorconfig` (2-space indent). Component selector prefix `app`, component styles SCSS.
+- Secrets: real values go in the gitignored root `.env`; `.env.example` holds placeholders only. The gitleaks pre-commit hook (`.githooks/pre-commit`, needs `brew install gitleaks`) blocks staged secrets, and `.github/workflows/gitleaks.yml` runs `scripts/gitleaks-scan-history.sh` (full history, all refs, merge commits included) with a checksum-pinned gitleaks on every push and PR; change the scan there, not in the workflow, so the tests cover it. When bumping gitleaks, update `GITLEAKS_VERSION` and `GITLEAKS_SHA256` there together. False positives go in a `gitleaks:allow` comment or a value-specific `.gitleaks.toml` allowlist, not `.gitleaksignore` fingerprints (too broad) or `--no-verify` (CI would still fail). Never add real-looking tokens to tests or fixtures; build fake ones at runtime as `scripts/test-gitleaks-hook.sh` does.
 - Ignore rules: repo-wide noise (OS, JetBrains, `.env`, `.claude/settings.local.json`) in the root `.gitignore`; build output in `backend/.gitignore` and `frontend/.gitignore`.
 - Remote: `github.com/albercode10/ask-my-docs`, default branch `main`.
 
@@ -62,8 +71,8 @@ Decided in Linear but not in the repo yet — do not assume these exist:
 
 - Postgres + pgvector via Docker Compose for local dev; Ollama stays native on the host (ALB-6, ALB-10).
 - Pinned tool versions: SDKMAN for Java 21, a Node version file (ALB-25).
-- Spotless for Java, ESLint + Prettier for Angular, enforced in CI (ALB-26); GitHub Actions CI (ALB-8).
-- gitleaks pre-commit hook and CI scan (ALB-28); Dependabot (ALB-27).
+- Spotless for Java, ESLint + Prettier for Angular, enforced in CI (ALB-26); GitHub Actions build/test CI (ALB-8). The only workflow so far is the gitleaks scan.
+- Dependabot (ALB-27).
 - Backend `/health` endpoint, CORS and Angular dev proxy (ALB-7).
 - Testcontainers integration tests (ALB-16), Playwright E2E (ALB-29), RAG evaluation set (ALB-17).
 - Observability: Grafana `otel-lgtm` in Docker Compose, OTLP export, Spring AI observations, Grafana MCP (ALB-18–22); optional Langfuse (ALB-23).
