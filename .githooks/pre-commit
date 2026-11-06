@@ -1,0 +1,35 @@
+#!/bin/sh
+# Blocks commits whose staged changes contain secrets, using gitleaks.
+# Enable once per clone:  git config core.hooksPath .githooks
+# See README.md, "Secrets".
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+pre-commit: gitleaks is not installed, so staged changes can't be scanned for secrets.
+Install it (macOS: brew install gitleaks) and commit again.
+EOF
+  exit 1
+fi
+
+# Exit code 99 means "leaks found"; anything else non-zero means gitleaks itself
+# failed (99 can't be confused with Go's exit 2 on a crash).
+gitleaks git --staged --redact --no-banner --verbose --exit-code 99
+status=$?
+
+if [ "$status" -eq 99 ]; then
+  cat >&2 <<'EOF'
+
+pre-commit: gitleaks found a possible secret in the staged changes. Commit blocked.
+- Real secret: unstage it, move it to .env (gitignored), and rotate it if it was ever shared.
+- False positive: add a "gitleaks:allow" comment at the end of that line. CI honours it
+  on every branch. For files that can't hold a comment, see README.md, "Secrets".
+EOF
+  exit 1
+elif [ "$status" -ne 0 ]; then
+  cat >&2 <<EOF
+
+pre-commit: gitleaks failed (exit $status) before it could finish the scan. Commit blocked.
+Check the error above (for example a broken .gitleaks.toml or .gitleaksignore) and commit again.
+EOF
+  exit 1
+fi
