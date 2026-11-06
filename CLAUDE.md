@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ask-my-docs is a RAG ("ask questions about your documents") app, currently at the skeleton stage: no RAG, ingestion or chat code exists yet. It is a monorepo with two independent projects and no root-level build:
 
-- `backend/` — Spring Boot 4.1 + Spring AI 2.0 (`spring-ai-starter-model-ollama`, Spring MVC), Java 21, Maven 3.10 via wrapper. Package root `com.alber.backend`.
-- `frontend/` — Angular 22 standalone app (no NgModules, signals, `@angular/build` application builder), SCSS, Vitest for unit tests. Node `^22.22.3 || ^24.15.0 || >=26`.
+- `backend/` — Spring Boot 4.1 + Spring AI 2.0 (`spring-ai-starter-model-ollama`, Spring MVC), Java 21 (Temurin, pinned in root `.sdkmanrc`; `maven-enforcer-plugin` fails the build on any other major), Maven 3.10 via wrapper. Package root `com.alber.backend`.
+- `frontend/` — Angular 22 standalone app (no NgModules, signals, `@angular/build` application builder), SCSS, Vitest for unit tests. Node 26, pinned in `frontend/.nvmrc` (Angular 22 accepts `^22.22.3 || ^24.15.0 || >=26`).
 
 The backend talks to a **local Ollama** instance (`spring.ai.ollama.base-url=http://localhost:11434`, chat model `qwen3:8b`, in `backend/src/main/resources/application.properties`). Ollama must be running with the model pulled for the backend to answer chat requests. The backend starts and `./mvnw test` passes without it. Pull the model once:
 
@@ -50,6 +50,7 @@ sh scripts/gitleaks-scan-history.sh   # scan the full history for secrets (what 
 - Lombok is on the annotation-processor path for both main and test compilation.
 - Frontend: Prettier (`printWidth` 100, single quotes, Angular parser for HTML) and `.editorconfig` (2-space indent). Component selector prefix `app`, component styles SCSS.
 - Secrets: real values go in the gitignored root `.env`; `.env.example` holds placeholders only. The gitleaks pre-commit hook (`.githooks/pre-commit`, needs `brew install gitleaks`) blocks staged secrets, and `.github/workflows/gitleaks.yml` runs `scripts/gitleaks-scan-history.sh` (full history, all refs, merge commits included) with a checksum-pinned gitleaks on every push and PR; change the scan there, not in the workflow, so the tests cover it. When bumping gitleaks, update `GITLEAKS_VERSION` and `GITLEAKS_SHA256` there together. False positives go in a `gitleaks:allow` comment or a value-specific `.gitleaks.toml` allowlist, not `.gitleaksignore` fingerprints (too broad) or `--no-verify` (CI would still fail). Never add real-looking tokens to tests or fixtures; build fake ones at runtime as `scripts/test-gitleaks-hook.sh` does.
+- Tool versions: bump Java in `.sdkmanrc` and Node in `frontend/.nvmrc`; the planned build CI (ALB-8) will read the same files. Keep the enforcer range in `backend/pom.xml` and `java.version` on 21 unless moving Java majors on purpose. Bump `.sdkmanrc` for new Temurin 21 patches (security fixes). SDKMAN auto-env reads `.sdkmanrc` only in the directory you `cd` into, so shells must start at the repo root.
 - Ignore rules: repo-wide noise (OS, JetBrains, `.env`, `.claude/settings.local.json`) in the root `.gitignore`; build output in `backend/.gitignore` and `frontend/.gitignore`.
 - Remote: `github.com/albercode10/ask-my-docs`, default branch `main`.
 
@@ -70,7 +71,6 @@ Work is tracked in Linear: team `ALB`, project `ask-my-docs` (`P-ALB-1`), 2-week
 Decided in Linear but not in the repo yet — do not assume these exist:
 
 - Postgres + pgvector via Docker Compose for local dev; Ollama stays native on the host (ALB-6, ALB-10).
-- Pinned tool versions: SDKMAN for Java 21, a Node version file (ALB-25).
 - Spotless for Java, ESLint + Prettier for Angular, enforced in CI (ALB-26); GitHub Actions build/test CI (ALB-8). The only workflow so far is the gitleaks scan.
 - Dependabot (ALB-27).
 - Backend `/health` endpoint, CORS and Angular dev proxy (ALB-7).
