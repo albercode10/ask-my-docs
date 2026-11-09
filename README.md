@@ -34,7 +34,7 @@ git config core.hooksPath .githooks
 
 ### Java and Node versions
 
-The repo pins its Java and Node versions in files that the build CI (ALB-8, planned) will also read. Java comes from [SDKMAN](https://sdkman.io). Install it once:
+The repo pins its Java and Node versions in files that the code style CI also reads (and the build CI, ALB-8, will). Java comes from [SDKMAN](https://sdkman.io). Install it once:
 
 ```bash
 curl -s "https://get.sdkman.io" | bash
@@ -112,6 +112,38 @@ Smoke tests for the local database. They need Docker running, and use a throwawa
 ```bash
 sh scripts/test-compose.sh
 ```
+
+Tests for the code style tooling below. They run the checks on throwaway copies of `backend/` and `frontend/` (run `npm ci` in `frontend/` first):
+
+```bash
+sh scripts/test-code-style.sh
+```
+
+## Code style
+
+CI ([`code-style.yml`](.github/workflows/code-style.yml)) fails on unformatted code or ESLint errors, on every push and pull request. One command fixes formatting.
+
+Backend: [Spotless](https://github.com/diffplug/spotless) with [Palantir Java Format](https://github.com/palantir/palantir-java-format) (4-space indent, 120 columns). It also removes unused imports, trims trailing whitespace and ends files with a newline. In `backend/`:
+
+```bash
+./mvnw spotless:apply
+```
+
+`./mvnw spotless:check` only checks; `./mvnw verify` runs it too.
+
+Frontend: [Prettier](https://prettier.io) formats (config in [`frontend/.prettierrc`](frontend/.prettierrc)), [ESLint](https://eslint.org) with [angular-eslint](https://github.com/angular-eslint/angular-eslint) lints (config in [`frontend/eslint.config.js`](frontend/eslint.config.js)). `eslint-config-prettier` turns off the ESLint rules that would fight Prettier. In `frontend/`:
+
+```bash
+npm run format
+```
+
+`npm run format:check` only checks. Lint with:
+
+```bash
+npm run lint
+```
+
+IntelliJ IDEA: install the **palantir-java-format** plugin and enable it in Settings → palantir-java-format, so Reformat Code matches Spotless. If you use Checkstyle-IDEA, turn off its bundled Sun and Google checks: they expect a different style and would flag Palantir-formatted code.
 
 ## Secrets
 
