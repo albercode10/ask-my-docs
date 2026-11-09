@@ -27,6 +27,7 @@ Backend (run from `backend/`):
 ./mvnw test -Dtest=BackendApplicationTests               # one test class
 ./mvnw test -Dtest=BackendApplicationTests#contextLoads  # one test method
 ./mvnw package                                           # build jar
+./mvnw spotless:apply                                    # format Java (spotless:check only checks; verify runs it)
 ```
 
 Frontend (run from `frontend/`):
@@ -36,7 +37,8 @@ npm start                                         # ng serve on http://localhost
 npm run build                                     # production build (budgets: 500kB warn / 1MB error initial)
 npm test                                          # Vitest via ng test (watch mode)
 npx ng test --watch=false --include app/app.spec.ts   # single spec; path is relative to src/
-npx prettier --write .                            # format
+npm run format                                    # Prettier, write (format:check only checks)
+npm run lint                                      # ng lint (ESLint + angular-eslint)
 ```
 
 Repo root:
@@ -47,14 +49,17 @@ sh scripts/test-gitleaks-hook.sh      # tests for the hook, the CI scan script a
 sh scripts/gitleaks-scan-history.sh   # scan the full history for secrets (what CI runs)
 docker compose up -d --wait           # local Postgres + pgvector (needs .env); down keeps data, down -v deletes it
 sh scripts/test-compose.sh            # smoke tests for compose.yaml (throwaway project and port; needs Docker running)
+sh scripts/test-code-style.sh         # tests for Spotless, ESLint and Prettier on throwaway copies (needs Java 21 and frontend node_modules)
 ```
 
 ## Conventions
 
 - Lombok is on the annotation-processor path for both main and test compilation.
-- Frontend: Prettier (`printWidth` 100, single quotes, Angular parser for HTML) and `.editorconfig` (2-space indent). Component selector prefix `app`, component styles SCSS.
+- Java style: Spotless with Palantir Java Format (versions in `backend/pom.xml` properties), plus unused-import removal, trailing whitespace and final newline. Run `./mvnw spotless:apply` after editing Java. IntelliJ formats the same way with the palantir-java-format plugin enabled; setup, and why Checkstyle-IDEA's bundled checks must be off, are in README "Code style".
+- Frontend: Prettier (`printWidth` 100, single quotes, Angular parser for HTML) and `.editorconfig` (2-space indent). ESLint flat config in `frontend/eslint.config.js` (angular-eslint recommended + template accessibility, `eslint-config-prettier` last so no rule fights Prettier). Component selector prefix `app` (enforced by lint), component styles SCSS. Run `npm run format` and `npm run lint` after editing frontend files.
+- Style CI: `.github/workflows/code-style.yml` runs `spotless:check`, `npm run lint`, `npm run format:check` and `scripts/test-code-style.sh` on every push and PR, with Java from `.sdkmanrc` and Node from `frontend/.nvmrc`. It doesn't run tests or builds (ALB-8). The pre-commit hook stays gitleaks-only.
 - Secrets: real values go in the gitignored root `.env`; `.env.example` holds placeholders only. The gitleaks pre-commit hook (`.githooks/pre-commit`, needs `brew install gitleaks`) blocks staged secrets, and `.github/workflows/gitleaks.yml` runs `scripts/gitleaks-scan-history.sh` (full history, all refs, merge commits included) with a checksum-pinned gitleaks on every push and PR; change the scan there, not in the workflow, so the tests cover it. When bumping gitleaks, update `GITLEAKS_VERSION` and `GITLEAKS_SHA256` there together. False positives go in a `gitleaks:allow` comment or a value-specific `.gitleaks.toml` allowlist, not `.gitleaksignore` fingerprints (too broad) or `--no-verify` (CI would still fail). Never add real-looking tokens to tests or fixtures; build fake ones at runtime as `scripts/test-gitleaks-hook.sh` does.
-- Tool versions: bump Java in `.sdkmanrc` and Node in `frontend/.nvmrc`; the planned build CI (ALB-8) will read the same files. Keep the enforcer range in `backend/pom.xml` and `java.version` on 21 unless moving Java majors on purpose. Bump `.sdkmanrc` for new Temurin 21 patches (security fixes). SDKMAN auto-env reads `.sdkmanrc` only in the directory you `cd` into, so shells must start at the repo root.
+- Tool versions: bump Java in `.sdkmanrc` and Node in `frontend/.nvmrc`; the code style workflow reads the same files, and the planned build CI (ALB-8) will too. Keep the enforcer range in `backend/pom.xml` and `java.version` on 21 unless moving Java majors on purpose. Bump `.sdkmanrc` for new Temurin 21 patches (security fixes). SDKMAN auto-env reads `.sdkmanrc` only in the directory you `cd` into, so shells must start at the repo root.
 - Ignore rules: repo-wide noise (OS, JetBrains, `.env`, `.claude/settings.local.json`) in the root `.gitignore`; build output in `backend/.gitignore` and `frontend/.gitignore`.
 - Remote: `github.com/albercode10/ask-my-docs`, default branch `main`.
 
@@ -76,7 +81,7 @@ Decided in Linear but not in the repo yet — do not assume these exist:
 
 - Backend wired to the compose Postgres: datasource, pgvector store, `spring-boot-docker-compose` (ALB-10). Ollama stays native on the host.
 - CI job for `scripts/test-compose.sh` (ALB-8).
-- Spotless for Java, ESLint + Prettier for Angular, enforced in CI (ALB-26); GitHub Actions build/test CI (ALB-8). The only workflow so far is the gitleaks scan.
+- GitHub Actions build/test CI (ALB-8). The workflows so far are the gitleaks scan and the code style check.
 - Dependabot (ALB-27).
 - Backend `/health` endpoint, CORS and Angular dev proxy (ALB-7).
 - Testcontainers integration tests (ALB-16), Playwright E2E (ALB-29), RAG evaluation set (ALB-17).
