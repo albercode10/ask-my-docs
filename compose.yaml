@@ -1,0 +1,41 @@
+# Local dev services. Ollama is not here: it runs natively on the host, where it
+# can use the Apple GPU (Docker on macOS can't).
+#
+#   docker compose up -d --wait   # start, return once Postgres accepts connections
+#   docker compose down           # stop, keep the data
+#   docker compose down -v        # stop and delete the data
+#
+# Credentials come from .env at the repo root (copy .env.example).
+# Tested by scripts/test-compose.sh.
+name: ask-my-docs
+
+services:
+  postgres:
+    # Exact tag (pgvector version + Postgres major + Debian release) plus the
+    # multi-arch index digest, so a re-pushed tag can't change what runs.
+    # Bump both together.
+    image: pgvector/pgvector:0.8.7-pg18-trixie@sha256:5895949dfcdf308eb0cd31c950c93c14895c77f33fbedfecf1fa511ab1d4bcd2
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env (copy .env.example)}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env (copy .env.example)}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?choose a POSTGRES_PASSWORD in .env (copy .env.example first)}
+    ports:
+      # Host only, not reachable from the network.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # Postgres 18+ images keep data under /var/lib/postgresql/<major>/docker,
+      # so the volume goes on /var/lib/postgresql (not .../data as before 18).
+      - postgres-data:/var/lib/postgresql
+      # Runs only when the volume is empty (first start, or after down -v).
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # Over TCP: on first start the image runs a temporary server on the unix
+      # socket only while the init scripts run, and pg_isready on the socket
+      # would report that one as ready.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  postgres-data:

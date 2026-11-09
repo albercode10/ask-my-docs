@@ -11,6 +11,7 @@ Ask questions about your documents and get answers grounded in them, using a loc
 | `backend/` | Spring Boot 4.1, Spring AI 2.0, Java 21, Maven | REST API; talks to the LLM through Spring AI's Ollama starter |
 | `frontend/` | Angular 22 (standalone), Vitest | Web UI |
 | Ollama (local) | `qwen3:8b` at `http://localhost:11434` | Chat model, configured in `backend/src/main/resources/application.properties` |
+| Postgres (Docker) | Postgres 18 + pgvector, [`compose.yaml`](compose.yaml) | Vector store for the RAG pipeline; not used by the backend yet (ALB-10) |
 
 ## Prerequisites
 
@@ -23,6 +24,7 @@ Ask questions about your documents and get answers grounded in them, using a loc
   ```
 
 - [gitleaks](https://github.com/gitleaks/gitleaks) for the pre-commit secret scan (`brew install gitleaks`)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [OrbStack](https://orbstack.dev), for the local Postgres. Ollama stays outside Docker: Docker on macOS can't use the Apple GPU.
 
 After cloning, turn on the repo's git hooks once:
 
@@ -54,6 +56,28 @@ Run `nvm use` in `frontend/` in each new terminal, or set up nvm's [deeper shell
 
 To bump a version, change `.sdkmanrc` or `frontend/.nvmrc`. Bump `.sdkmanrc` when a new Temurin 21 patch comes out, to pick up its security fixes.
 
+## Local database
+
+Postgres 18 with the [pgvector](https://github.com/pgvector/pgvector) extension runs in Docker Compose. The backend doesn't use it yet: it's ready for the pgvector store (ALB-10). Start Docker Desktop or OrbStack, then at the repo root:
+
+```bash
+cp .env.example .env
+```
+
+Set `POSTGRES_PASSWORD` in `.env` (Compose refuses to start while it's empty), then start it. `--wait` returns once Postgres accepts connections:
+
+```bash
+docker compose up -d --wait
+```
+
+Postgres listens on `localhost:5432` only (set `POSTGRES_PORT` in `.env` if that port is taken). Check that pgvector is installed:
+
+```bash
+docker compose exec postgres psql -U askmydocs -d askmydocs -c '\dx vector'
+```
+
+Stop it with `docker compose down`; the data stays in the `postgres-data` volume. To start from scratch, run `docker compose down -v`, which deletes the data. Do that too after changing the credentials in `.env`: they're only applied when the volume is first created, and so is [`docker/postgres/init/`](docker/postgres/init), which installs the `vector` extension.
+
 ## Running
 
 Backend:
@@ -82,6 +106,12 @@ cd frontend && npm test
 ```
 
 The tests don't need Ollama: the backend context starts without it. Ollama is only needed to answer chat requests.
+
+Smoke tests for the local database. They need Docker running, and use a throwaway Compose project, port and credentials, so your database and `.env` are left alone:
+
+```bash
+sh scripts/test-compose.sh
+```
 
 ## Secrets
 

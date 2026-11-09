@@ -15,6 +15,8 @@ The backend talks to a **local Ollama** instance (`spring.ai.ollama.base-url=htt
 ollama pull qwen3:8b
 ```
 
+Local Postgres 18 + pgvector runs in Docker Compose (`compose.yaml` at the root, image pinned to an exact `pgvector/pgvector` tag plus its multi-arch index digest (bump both together), credentials from the root `.env` (`POSTGRES_PASSWORD` is empty in `.env.example` on purpose, so Compose refuses to start until one is set), healthcheck over TCP (the socket also answers for the image's temporary init server), port bound to `127.0.0.1`, named volume at `/var/lib/postgresql`, the PG 18 data root). `docker/postgres/init/01-create-vector-extension.sql` installs `vector` in the app database, only when the volume is empty. The backend doesn't connect to it yet: ALB-10 adds the datasource, the pgvector store and `spring-boot-docker-compose`.
+
 ## Commands
 
 Backend (run from `backend/`):
@@ -43,6 +45,8 @@ Repo root:
 git config core.hooksPath .githooks   # once per clone: enables the gitleaks pre-commit hook
 sh scripts/test-gitleaks-hook.sh      # tests for the hook, the CI scan script and .env setup (CI runs them too)
 sh scripts/gitleaks-scan-history.sh   # scan the full history for secrets (what CI runs)
+docker compose up -d --wait           # local Postgres + pgvector (needs .env); down keeps data, down -v deletes it
+sh scripts/test-compose.sh            # smoke tests for compose.yaml (throwaway project and port; needs Docker running)
 ```
 
 ## Conventions
@@ -70,7 +74,8 @@ Work is tracked in Linear: team `ALB`, project `ask-my-docs` (`P-ALB-1`), 2-week
 
 Decided in Linear but not in the repo yet — do not assume these exist:
 
-- Postgres + pgvector via Docker Compose for local dev; Ollama stays native on the host (ALB-6, ALB-10).
+- Backend wired to the compose Postgres: datasource, pgvector store, `spring-boot-docker-compose` (ALB-10). Ollama stays native on the host.
+- CI job for `scripts/test-compose.sh` (ALB-8).
 - Spotless for Java, ESLint + Prettier for Angular, enforced in CI (ALB-26); GitHub Actions build/test CI (ALB-8). The only workflow so far is the gitleaks scan.
 - Dependabot (ALB-27).
 - Backend `/health` endpoint, CORS and Angular dev proxy (ALB-7).
