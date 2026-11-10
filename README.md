@@ -56,7 +56,7 @@ nvm install
 
 Run `nvm use` in `frontend/` in each new terminal, or set up nvm's [deeper shell integration](https://github.com/nvm-sh/nvm#deeper-shell-integration) (or `fnm env --use-on-cd`) to switch on `cd`.
 
-To bump a version, change `.sdkmanrc` or `frontend/.nvmrc`. Bump `.sdkmanrc` when a new Temurin 21 patch comes out, to pick up its security fixes.
+To bump a version, change `.sdkmanrc` or `frontend/.nvmrc`. Bump `.sdkmanrc` when a new Temurin 21 patch comes out, to pick up its security fixes. [Dependabot](#dependency-updates) doesn't read these files.
 
 ## Local database
 
@@ -129,7 +129,7 @@ Checks for the docs below: ADR numbering, titles, statuses and sections, the ADR
 sh scripts/test-docs.sh
 ```
 
-Checks for the CI workflows below: what the build workflow runs and with which versions, and that every workflow pins its actions to a commit SHA, has a read-only token and doesn't persist credentials. CI runs them:
+Checks for the CI workflows below: what the build workflow runs and with which versions, and that every workflow pins its actions to a commit SHA, has a read-only token and doesn't persist credentials. They also check the [Dependabot config](#dependency-updates). CI runs them:
 
 ```bash
 sh scripts/test-workflows.sh
@@ -150,6 +150,23 @@ GitHub Actions runs four workflows on every push and pull request. Each job show
 | [`gitleaks.yml`](.github/workflows/gitleaks.yml) | `gitleaks` | full-history secret scan ([Secrets](#secrets)) |
 
 Java and Node come from `.sdkmanrc` and `frontend/.nvmrc`, and Maven and npm downloads are cached. The Maven cache is shared: only the `backend` job saves it (when it succeeds), and `code-style.yml` only restores it, so a saved cache holds the full dependency set. A newer push to the same branch cancels the build run it replaces, except on `main`, where every commit gets a result. Each job has a timeout (5–20 minutes). When the `backend` job fails, its test reports are attached to the run as the `surefire-reports` artifact. Actions are pinned to commit SHAs; when bumping one, update the SHA and its version comment in every workflow that uses it.
+
+## Dependency updates
+
+[Dependabot](.github/dependabot.yml) checks for new versions every Monday and opens PRs, labelled `dependencies` plus an area label. CI runs on them like on any other PR.
+
+| Ecosystem | Directory | Grouped minor and patch PRs |
+|---|---|---|
+| Maven | `backend/` | `spring` (Spring Boot, Spring AI), `maven` (the rest) |
+| npm | `frontend/` | `angular` (Angular, its CLI and builder, angular-eslint, TypeScript), `npm` (the rest) |
+| GitHub Actions | `.github/workflows/` | `actions` (SHA pins and their version comments) |
+| Docker Compose | `compose.yaml` | `docker` (image tag and digest) |
+
+- Major updates come as one PR each, since they usually need code changes.
+- A new release waits 7 days before Dependabot proposes it (majors 14 days for Maven and npm), so a broken or yanked release has time to be caught. At most 3 version PRs per ecosystem are open at once.
+- Security alerts and security update PRs are repo settings, not part of the config file: turn them on under Settings → Advanced Security (they're on for this repo; a fork starts with them off). Security PRs skip the wait and the PR limit. The Compose image gets version updates only: Dependabot has no security updates for Docker Compose.
+- Not covered, bump by hand: Java (`.sdkmanrc`), Node (`frontend/.nvmrc`), npm (`packageManager` in `frontend/package.json`), the Maven wrapper, gitleaks (`GITLEAKS_VERSION` and `GITLEAKS_SHA256` in [`gitleaks.yml`](.github/workflows/gitleaks.yml)) and `palantir-java-format.version` in `backend/pom.xml` (used only inside the Spotless plugin's config).
+- Dependabot reads its config from `main` only, so a change to it takes effect after merge. Its labels must exist in the repo, or Dependabot leaves them off.
 
 ## Documentation
 

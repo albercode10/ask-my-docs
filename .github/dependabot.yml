@@ -1,0 +1,125 @@
+# Dependabot version updates: one weekly run per ecosystem, with minor and patch
+# updates grouped into a few PRs. Majors come one PR each, since they usually
+# need code changes. CI (build.yml and the others) runs on every Dependabot PR.
+#
+# - A dependency goes to the first group it matches, so the "*" group comes last.
+# - cooldown: a release waits a week (majors two weeks for maven and npm) before
+#   it's proposed, so a bad or yanked release has time to be caught.
+#   github-actions and docker-compose support only default-days.
+# - Labels must exist in the repo, or Dependabot drops them.
+# - Security updates skip the cooldown and the PR limit. Alerts and security
+#   update PRs are repo settings (Settings > Advanced Security), not part of this
+#   file. Docker Compose gets version updates only, no security PRs.
+# - Not covered, bump by hand: Java (.sdkmanrc), Node (frontend/.nvmrc), npm
+#   (packageManager), the Maven wrapper, gitleaks (GITLEAKS_VERSION and
+#   GITLEAKS_SHA256 in workflows/gitleaks.yml) and palantir-java-format (a
+#   property used only inside the Spotless plugin config in backend/pom.xml).
+#
+# Dependabot reads this file only from the default branch. Checked by
+# scripts/test-workflows.sh. See docs/plans/ALB-27.md.
+version: 2
+
+updates:
+  - package-ecosystem: maven
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - backend
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      # Spring Boot parent and the Spring AI BOM.
+      spring:
+        patterns:
+          - "org.springframework*"
+        update-types:
+          - minor
+          - patch
+      maven:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - frontend
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      # The framework, CLI and builder move together; Angular pins the
+      # TypeScript range it supports.
+      angular:
+        patterns:
+          - "@angular/*"
+          - "@angular-devkit/*"
+          - "@schematics/*"
+          - "angular-eslint"
+          - "typescript"
+        update-types:
+          - minor
+          - patch
+      npm:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # Actions are pinned to commit SHAs with a version comment.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - ci
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # Images in compose.yaml, pinned as tag@digest. scripts/test-compose.sh fails
+  # a bump that leaves Postgres 18 or drops the digest.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - docker
+    cooldown:
+      default-days: 7
+    groups:
+      docker:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
