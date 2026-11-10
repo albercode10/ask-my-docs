@@ -36,6 +36,7 @@ Frontend (run from `frontend/`):
 npm start                                         # ng serve on http://localhost:4200
 npm run build                                     # production build (budgets: 500kB warn / 1MB error initial)
 npm test                                          # Vitest via ng test (watch mode)
+npm run test:ci                                   # Vitest once, headless (what CI runs)
 npx ng test --watch=false --include app/app.spec.ts   # single spec; path is relative to src/
 npm run format                                    # Prettier, write (format:check only checks)
 npm run lint                                      # ng lint (ESLint + angular-eslint)
@@ -51,6 +52,7 @@ docker compose up -d --wait           # local Postgres + pgvector (needs .env); 
 sh scripts/test-compose.sh            # smoke tests for compose.yaml (throwaway project and port; needs Docker running)
 sh scripts/test-code-style.sh         # tests for Spotless, ESLint and Prettier on throwaway copies (needs Java 21 and frontend node_modules)
 sh scripts/test-docs.sh               # checks ADRs, the ADR index, architecture diagrams and relative Markdown links (CI runs it)
+sh scripts/test-workflows.sh          # checks the CI workflows: build jobs, SHA-pinned actions, read-only token (CI runs it)
 ```
 
 ## Conventions
@@ -58,14 +60,15 @@ sh scripts/test-docs.sh               # checks ADRs, the ADR index, architecture
 - Lombok is on the annotation-processor path for both main and test compilation.
 - Java style: Spotless with Palantir Java Format (versions in `backend/pom.xml` properties), plus unused-import removal, trailing whitespace and final newline. Run `./mvnw spotless:apply` after editing Java. IntelliJ formats the same way with the palantir-java-format plugin enabled; setup, and why Checkstyle-IDEA's bundled checks must be off, are in README "Code style".
 - Frontend: Prettier (`printWidth` 100, single quotes, Angular parser for HTML) and `.editorconfig` (2-space indent). ESLint flat config in `frontend/eslint.config.js` (angular-eslint recommended + template accessibility, `eslint-config-prettier` last so no rule fights Prettier). Component selector prefix `app` (enforced by lint), component styles SCSS. Run `npm run format` and `npm run lint` after editing frontend files.
-- Style CI: `.github/workflows/code-style.yml` runs `spotless:check`, `npm run lint`, `npm run format:check` and `scripts/test-code-style.sh` on every push and PR, with Java from `.sdkmanrc` and Node from `frontend/.nvmrc`. It doesn't run tests or builds (ALB-8). The pre-commit hook stays gitleaks-only.
+- Style CI: `.github/workflows/code-style.yml` runs `spotless:check`, `npm run lint`, `npm run format:check` and `scripts/test-code-style.sh` on every push and PR, with Java from `.sdkmanrc` and Node from `frontend/.nvmrc`. It doesn't run tests or builds. The pre-commit hook stays gitleaks-only.
+- Build CI: `.github/workflows/build.yml` runs on every push and PR, one job per check: `backend` (`./mvnw -B -ntp verify`), `frontend` (`npm ci`, `npm run build`, `npm run test:ci`), `compose` (`scripts/test-compose.sh`) and `workflows` (`scripts/test-workflows.sh`). Every workflow pins actions to a full commit SHA with a version comment, sets `permissions: contents: read` and checks out with `persist-credentials: false`; `scripts/test-workflows.sh` enforces all three, so new workflows must follow them. The setup-java Maven cache key is the hash of `backend/pom.xml` in both workflows: only the backend job saves it (`code-style.yml` sets `cache-read-only: true`), so keep it that way in any new Java job.
 - Docs (ADR 0003): what describes the code lives in the repo and changes in the same PR; planning and product thinking live in Linear, linked, never copied.
   - ADRs in `docs/adr/` for decisions that are costly to reverse (datastore, framework, data model, protocol, cross-cutting pattern), not local design choices. Copy `0000-template.md` to the next free `NNNN-kebab-title.md`, add it to the index in `docs/adr/README.md`. Don't rewrite an accepted ADR: supersede it with a new one.
   - Keep `docs/architecture.md` current: when a PR builds or changes a component or a RAG step, update its diagram and the "Built in" tables.
   - API docs: springdoc (`springdoc-openapi-starter-webmvc-ui`, version in the `springdoc.version` pom property) serves `/v3/api-docs` and `/swagger-ui.html`. Off by default; on in the `dev` profile (`application-dev.properties`), which `./mvnw spring-boot:run` activates through the `spring-boot.run.profiles` pom property. Tests that need them use `@ActiveProfiles("dev")`. API title, description and version are in `config/OpenApiConfig`. Annotate new controllers (`@Tag`, `@Operation`, `@ApiResponse`) so Swagger UI explains them.
   - `.github/workflows/docs.yml` runs `scripts/test-docs.sh` on every push and PR.
 - Secrets: real values go in the gitignored root `.env`; `.env.example` holds placeholders only. The gitleaks pre-commit hook (`.githooks/pre-commit`, needs `brew install gitleaks`) blocks staged secrets, and `.github/workflows/gitleaks.yml` runs `scripts/gitleaks-scan-history.sh` (full history, all refs, merge commits included) with a checksum-pinned gitleaks on every push and PR; change the scan there, not in the workflow, so the tests cover it. When bumping gitleaks, update `GITLEAKS_VERSION` and `GITLEAKS_SHA256` there together. False positives go in a `gitleaks:allow` comment or a value-specific `.gitleaks.toml` allowlist, not `.gitleaksignore` fingerprints (too broad) or `--no-verify` (CI would still fail). Never add real-looking tokens to tests or fixtures; build fake ones at runtime as `scripts/test-gitleaks-hook.sh` does.
-- Tool versions: bump Java in `.sdkmanrc` and Node in `frontend/.nvmrc`; the code style workflow reads the same files, and the planned build CI (ALB-8) will too. Keep the enforcer range in `backend/pom.xml` and `java.version` on 21 unless moving Java majors on purpose. Bump `.sdkmanrc` for new Temurin 21 patches (security fixes). SDKMAN auto-env reads `.sdkmanrc` only in the directory you `cd` into, so shells must start at the repo root.
+- Tool versions: bump Java in `.sdkmanrc` and Node in `frontend/.nvmrc`; the build and code style workflows read the same files. Keep the enforcer range in `backend/pom.xml` and `java.version` on 21 unless moving Java majors on purpose. Bump `.sdkmanrc` for new Temurin 21 patches (security fixes). SDKMAN auto-env reads `.sdkmanrc` only in the directory you `cd` into, so shells must start at the repo root.
 - Ignore rules: repo-wide noise (OS, JetBrains, `.env`, `.claude/settings.local.json`) in the root `.gitignore`; build output in `backend/.gitignore` and `frontend/.gitignore`.
 - Remote: `github.com/albercode10/ask-my-docs`, default branch `main`.
 
@@ -86,8 +89,6 @@ Work is tracked in Linear: team `ALB`, project `ask-my-docs` (`P-ALB-1`), 2-week
 Decided in Linear but not in the repo yet — do not assume these exist:
 
 - Backend wired to the compose Postgres: datasource, pgvector store, `spring-boot-docker-compose` (ALB-10). Ollama stays native on the host.
-- CI job for `scripts/test-compose.sh` (ALB-8).
-- GitHub Actions build/test CI (ALB-8). The workflows so far are the gitleaks scan, the code style check and the docs check.
 - Dependabot (ALB-27).
 - Backend `/health` endpoint, CORS and Angular dev proxy (ALB-7).
 - Testcontainers integration tests (ALB-16), Playwright E2E (ALB-29), RAG evaluation set (ALB-17).

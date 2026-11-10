@@ -36,7 +36,7 @@ git config core.hooksPath .githooks
 
 ### Java and Node versions
 
-The repo pins its Java and Node versions in files that the code style CI also reads (and the build CI, ALB-8, will). Java comes from [SDKMAN](https://sdkman.io). Install it once:
+The repo pins its Java and Node versions in files that the build and code style CI also read. Java comes from [SDKMAN](https://sdkman.io). Install it once:
 
 ```bash
 curl -s "https://get.sdkman.io" | bash
@@ -107,6 +107,8 @@ cd backend && ./mvnw test
 cd frontend && npm test
 ```
 
+`npm test` watches for changes; `npm run test:ci` runs the tests once, as CI does.
+
 The tests don't need Ollama: the backend context starts without it. Ollama is only needed to answer chat requests.
 
 Smoke tests for the local database. They need Docker running, and use a throwaway Compose project, port and credentials, so your database and `.env` are left alone:
@@ -126,6 +128,28 @@ Checks for the docs below: ADR numbering, titles, statuses and sections, the ADR
 ```bash
 sh scripts/test-docs.sh
 ```
+
+Checks for the CI workflows below: what the build workflow runs and with which versions, and that every workflow pins its actions to a commit SHA, has a read-only token and doesn't persist credentials. CI runs them:
+
+```bash
+sh scripts/test-workflows.sh
+```
+
+## CI
+
+GitHub Actions runs four workflows on every push and pull request. Each job shows as its own check on the PR:
+
+| Workflow | Jobs | What runs |
+|---|---|---|
+| [`build.yml`](.github/workflows/build.yml) | `backend` | `./mvnw verify`: compile, tests, Spotless |
+| | `frontend` | `npm ci`, `npm run build` (production), `npm run test:ci` |
+| | `compose` | `sh scripts/test-compose.sh` |
+| | `workflows` | `sh scripts/test-workflows.sh` |
+| [`code-style.yml`](.github/workflows/code-style.yml) | `code style` | Spotless, ESLint, Prettier, `scripts/test-code-style.sh` ([Code style](#code-style)) |
+| [`docs.yml`](.github/workflows/docs.yml) | `docs` | `scripts/test-docs.sh` |
+| [`gitleaks.yml`](.github/workflows/gitleaks.yml) | `gitleaks` | full-history secret scan ([Secrets](#secrets)) |
+
+Java and Node come from `.sdkmanrc` and `frontend/.nvmrc`, and Maven and npm downloads are cached. The Maven cache is shared: only the `backend` job saves it (when it succeeds), and `code-style.yml` only restores it, so a saved cache holds the full dependency set. A newer push to the same branch cancels the build run it replaces, except on `main`, where every commit gets a result. Each job has a timeout (5–20 minutes). When the `backend` job fails, its test reports are attached to the run as the `surefire-reports` artifact. Actions are pinned to commit SHAs; when bumping one, update the SHA and its version comment in every workflow that uses it.
 
 ## Documentation
 

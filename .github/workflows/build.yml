@@ -1,0 +1,112 @@
+# Builds and tests the backend and the frontend, runs the Docker Compose smoke
+# tests, and checks the workflows themselves, on every push and pull request.
+# Each job is its own check on the PR. Locally:
+#   backend/   ./mvnw verify                (tests + Spotless)
+#   frontend/  npm ci && npm run build && npm run test:ci
+#   root       sh scripts/test-compose.sh && sh scripts/test-workflows.sh
+# Tool versions come from .sdkmanrc and frontend/.nvmrc. Code style has its own
+# workflow (code-style.yml). See docs/plans/ALB-8.md.
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or PR cancels the run it supersedes. On main
+# every commit gets its own group, so each one gets a result (GitHub keeps one
+# pending run per group and replaces it even without cancel-in-progress).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          java-version-file: .sdkmanrc # Temurin, from the -tem suffix
+          # Same key as code-style.yml, which only restores it: this job saves
+          # the full dependency set.
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      # Enforcer, compile, tests (Ollama is mocked) and spotless:check.
+      - name: Build and test
+        working-directory: backend
+        run: ./mvnw -B -ntp verify
+
+      - name: Upload test reports
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: surefire-reports
+          path: backend/target/surefire-reports/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NG_CLI_ANALYTICS: 'false'
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (production)
+        run: npm run build
+
+      # Vitest with jsdom: headless, runs once.
+      - name: Unit tests
+        run: npm run test:ci
+
+  compose:
+    name: compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Throwaway Compose project on a free port with generated credentials.
+      # The runner has Docker and Compose v2; the script fails without them.
+      - name: Compose smoke tests
+        run: sh scripts/test-compose.sh
+
+  workflows:
+    name: workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check workflows
+        run: sh scripts/test-workflows.sh
