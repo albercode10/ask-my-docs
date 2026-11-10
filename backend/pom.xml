@@ -11,8 +11,8 @@
 	<groupId>com.alber</groupId>
 	<artifactId>backend</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name/>
-	<description/>
+	<name>ask-my-docs backend</name>
+	<description>REST API for ask-my-docs: answers questions about your documents with Spring AI and a local Ollama model.</description>
 	<url/>
 	<licenses>
 		<license/>
@@ -31,6 +31,9 @@
 		<spring-ai.version>2.0.1</spring-ai.version>
 		<spotless.version>3.11.0</spotless.version>
 		<palantir-java-format.version>2.103.0</palantir-java-format.version>
+		<springdoc.version>3.2.0</springdoc.version>
+		<!-- ./mvnw spring-boot:run starts in the dev profile (API docs on). Override with -Dspring-boot.run.profiles=... -->
+		<spring-boot.run.profiles>dev</spring-boot.run.profiles>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -40,6 +43,12 @@
 		<dependency>
 			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-starter-model-ollama</artifactId>
+		</dependency>
+		<!-- OpenAPI document at /v3/api-docs and Swagger UI at /swagger-ui.html. -->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>${springdoc.version}</version>
 		</dependency>
 
 		<dependency>

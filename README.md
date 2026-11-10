@@ -13,6 +13,8 @@ Ask questions about your documents and get answers grounded in them, using a loc
 | Ollama (local) | `qwen3:8b` at `http://localhost:11434` | Chat model, configured in `backend/src/main/resources/application.properties` |
 | Postgres (Docker) | Postgres 18 + pgvector, [`compose.yaml`](compose.yaml) | Vector store for the RAG pipeline; not used by the backend yet (ALB-10) |
 
+How the parts fit together and how a question becomes an answer: [docs/architecture.md](docs/architecture.md).
+
 ## Prerequisites
 
 - Java 21 (Temurin), pinned in [`.sdkmanrc`](.sdkmanrc). Maven comes with the wrapper, `./mvnw`. The backend build fails on any other Java version.
@@ -118,6 +120,22 @@ Tests for the code style tooling below. They run the checks on throwaway copies 
 ```bash
 sh scripts/test-code-style.sh
 ```
+
+Checks for the docs below: ADR numbering, titles, statuses and sections, the ADR index, the architecture diagrams, and every relative link in the Markdown files. CI runs them ([`docs.yml`](.github/workflows/docs.yml)):
+
+```bash
+sh scripts/test-docs.sh
+```
+
+## Documentation
+
+Docs that describe the code live in the repo and change in the same PR as the code. Planning and product thinking live in Linear ([ADR 0003](docs/adr/0003-linear-for-tracking-repo-and-linear-docs-for-documentation.md)).
+
+- [Architecture](docs/architecture.md): components and the RAG flow, with diagrams.
+- [Architecture decision records](docs/adr/README.md): why the stack is what it is, and how to add an ADR.
+- API: with the backend running, Swagger UI is at http://localhost:8080/swagger-ui.html and the OpenAPI document at http://localhost:8080/v3/api-docs. Endpoints document themselves with springdoc annotations as they're added. Both are on only in the `dev` profile, which `./mvnw spring-boot:run` activates ([`application-dev.properties`](backend/src/main/resources/application-dev.properties)); a packaged jar run without it doesn't publish them.
+- [`backend/http/`](backend/http): requests to try the API from IntelliJ's HTTP Client.
+- [Plans](docs/plans): the approved plan for each ticket.
 
 ## Code style
 

@@ -1,0 +1,24 @@
+# Checks the repo's technical docs on every push and pull request: ADR numbering,
+# titles, statuses and sections, the ADR index, the architecture diagrams, and
+# every relative Markdown link. Locally: sh scripts/test-docs.sh. See docs/plans/ALB-24.md.
+name: docs
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test docs
+        run: sh scripts/test-docs.sh
