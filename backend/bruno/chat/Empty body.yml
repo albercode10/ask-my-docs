@@ -1,0 +1,21 @@
+info:
+  name: Empty body
+  type: http
+  seq: 5
+http:
+  method: post
+  url: "{{baseUrl}}/chat"
+  headers:
+    - name: Content-Type
+      value: application/json
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "400"
+  scripts:
+    - type: tests
+      code: |-
+        test("error is a problem detail", function() {
+          expect(res.headers["content-type"]).to.include("application/problem+json");
+        });

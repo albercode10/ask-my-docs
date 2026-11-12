@@ -2,7 +2,7 @@
 
 Ask questions about your documents and get answers grounded in them, using a local LLM.
 
-> **Status:** project skeleton. The backend and frontend boot, but document ingestion, retrieval (RAG) and the chat UI are **planned** and not built yet.
+> **Status:** early. The backend answers questions about one book at `POST /chat`, sending the whole book to the model with each question. Retrieval (RAG), uploads, streaming and the chat UI are **planned** and not built yet.
 
 ## Architecture
 
@@ -10,7 +10,7 @@ Ask questions about your documents and get answers grounded in them, using a loc
 | --- | --- | --- |
 | `backend/` | Spring Boot 4.1, Spring AI 2.0, Java 21, Maven | REST API; talks to the LLM through Spring AI's Ollama starter |
 | `frontend/` | Angular 22 (standalone), Vitest | Web UI |
-| Ollama (local) | `qwen3:8b` at `http://localhost:11434` | Chat model, configured in `backend/src/main/resources/application.properties` |
+| Ollama (local) | `qwen3:8b` at `http://localhost:11434` | Chat model, configured in `backend/src/main/resources/application.properties` (32k context, thinking off) |
 | Postgres (Docker) | Postgres 18 + pgvector, [`compose.yaml`](compose.yaml) | Vector store for the RAG pipeline; not used by the backend yet (ALB-10) |
 
 How the parts fit together and how a question becomes an answer: [docs/architecture.md](docs/architecture.md).
@@ -25,6 +25,7 @@ How the parts fit together and how a question becomes an answer: [docs/architect
   ollama pull qwen3:8b
   ```
 
+- The book's EPUB in `data/books/` (see [The book](#the-book)). Without it the backend still starts, but `/chat` answers 503.
 - [gitleaks](https://github.com/gitleaks/gitleaks) for the pre-commit secret scan (`brew install gitleaks`)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [OrbStack](https://orbstack.dev), for the local Postgres. Ollama stays outside Docker: Docker on macOS can't use the Apple GPU.
 
@@ -80,6 +81,18 @@ docker compose exec postgres psql -U askmydocs -d askmydocs -c '\dx vector'
 
 Stop it with `docker compose down`; the data stays in the `postgres-data` volume. To start from scratch, run `docker compose down -v`, which deletes the data. Do that too after changing the credentials in `.env`: they're only applied when the volume is first created, and so is [`docker/postgres/init/`](docker/postgres/init), which installs the `vector` extension.
 
+## The book
+
+The app answers questions about one book: *Gentleman's Guide to Beard and Moustache Management* by Chris Martin (EPUB). The book is copyrighted, so it's **never committed**: `data/` is git-ignored. Put your copy here, under this name:
+
+```text
+data/books/beard-and-moustache-management.epub
+```
+
+The backend reads it at startup and logs `Loaded book …: N characters`. To use another path, set `app.book.path` (for example `APP_BOOK_PATH=/path/to/book.epub ./mvnw spring-boot:run`). A relative path resolves against `backend/`. If the file is missing or can't be read, the backend logs a warning, still starts, and `POST /chat` answers 503.
+
+The whole book (about 21k tokens) goes to the model with every question, so Ollama runs `qwen3:8b` with a 32k context window. That needs roughly 5 GB of memory on top of the model. Processing the book is slow (about 4.5 minutes measured on the development Mac), so the backend does it once in the background right after startup (`app.chat.warm-up`, logged as `Warmed up the model with the book in N s`), and Ollama keeps it in its prompt cache. After that, a question only pays for itself: about 2 s for a short answer, longer for a long one (generation runs at roughly 25 characters per second). The cache is lost when Ollama unloads the model, after 30 minutes idle (`spring.ai.ollama.chat.keep-alive`), so the first question after that is slow again.
+
 ## Running
 
 Backend:
@@ -89,6 +102,14 @@ cd backend
 ./mvnw spring-boot:run
 ```
 
+The backend listens on `127.0.0.1:8080` only (`server.address`): there's no authentication yet, so other machines on the network can't use the local model or pull the book through `/chat`. It also answers only requests addressed to `localhost`, `127.0.0.1` or `[::1]`, and gives 403 to any other `Host`, so a web page in your browser can't reach it by pointing its own domain at 127.0.0.1 (DNS rebinding).
+
+`POST /chat` takes a question of at most 2,000 characters (longer gives 400), caps the answer at about 1,000 tokens (`spring.ai.ollama.chat.num-predict`), and answers 503 when the book isn't loaded or the model doesn't answer (Ollama down, the model not pulled, or an empty answer). Model calls aren't retried for long (`spring.ai.retry.*`), so that 503 comes within seconds. Ask a question from the [Bruno collection](#trying-the-api-with-bruno) (**Chat → Valid question**), or from the terminal:
+
+```bash
+curl -s localhost:8080/chat -H 'Content-Type: application/json' -d '{"question": "How do I trim a moustache?"}'
+```
+
 Frontend (served at http://localhost:4200):
 
 ```bash
@@ -96,6 +117,41 @@ cd frontend
 npm install
 npm start
 ```
+
+### From IntelliJ IDEA
+
+Every command in this README is also a shared run configuration in [`.run/`](.run), so IntelliJ lists them in the Run widget after you open the repo root as the project. They're grouped in folders:
+
+| Folder | Configurations |
+| --- | --- |
+| Setup (once) | git hooks, `ollama pull qwen3:8b`, frontend `npm ci` |
+| Run | **Run app (backend + frontend)**, Backend: run (dev), Frontend: start, Postgres: up / down |
+| Backend | test, verify (what CI runs), spotless apply, package |
+| Frontend | test (watch), test:ci, build, lint, format, format:check |
+| Scripts | the `scripts/*.sh` checks: docs, workflows, compose, code style, gitleaks hook, gitleaks history scan |
+
+Settings they rely on:
+
+- **Maven** (Settings → Build Tools → Maven): *Maven home path* set to **Use Maven wrapper**, and the runner JRE set to the project JDK, Temurin 21. Any other Java fails the build.
+- **Node** (Settings → Languages & Frameworks → Node.js): the interpreter from [`frontend/.nvmrc`](frontend/.nvmrc).
+- The shell configurations (Setup, Postgres and Scripts) run in IntelliJ's terminal with `/bin/sh` from the repo root. The Maven and npm ones run in the Run tool window. Postgres needs the `.env` from [Local database](#local-database).
+- The backend runs from `backend/`, so the default book path `../data/books/…` resolves as it does on the command line.
+
+### Trying the API with Bruno
+
+Every endpoint has requests in a [Bruno](https://www.usebruno.com) collection, [`backend/bruno/`](backend/bruno). Bruno is a free, open-source desktop API client (no account), and the collection is plain YAML files in the repo (Bruno 4, OpenCollection format).
+
+1. Install Bruno once: `brew install --cask bruno`.
+2. In Bruno: **Open Collection** and choose the `backend/bruno` folder.
+3. Pick the **Local** environment (top right; it's the default), which points `{{baseUrl}}` at `http://localhost:8080`.
+4. Start the backend, open a request (for example **Chat → Valid question**) and press **Send** (⌘↵).
+
+The response panel shows the status, the body and the time. Each request also carries checks (the expected status, plus tests such as "answer is not blank"), shown as passed or failed in the **Tests** tab. Requests that call the model have no timeout, since a long answer can take a minute.
+
+| Folder | Requests |
+| --- | --- |
+| Chat | Valid question, Question the book doesn't cover, Blank question, Missing question, Empty body, Question too long (2,001 characters), Question at the limit (2,000 characters), Request for another host |
+| API docs | OpenAPI document, Swagger UI |
 
 ## Testing
 
@@ -109,7 +165,7 @@ cd frontend && npm test
 
 `npm test` watches for changes; `npm run test:ci` runs the tests once, as CI does.
 
-The tests don't need Ollama: the backend context starts without it. Ollama is only needed to answer chat requests.
+The tests don't need Ollama or the book: they stub the model and read a small EPUB they generate. Ollama and the book are only needed to answer real chat requests.
 
 Smoke tests for the local database. They need Docker running, and use a throwaway Compose project, port and credentials, so your database and `.env` are left alone:
 
@@ -175,7 +231,7 @@ Docs that describe the code live in the repo and change in the same PR as the co
 - [Architecture](docs/architecture.md): components and the RAG flow, with diagrams.
 - [Architecture decision records](docs/adr/README.md): why the stack is what it is, and how to add an ADR.
 - API: with the backend running, Swagger UI is at http://localhost:8080/swagger-ui.html and the OpenAPI document at http://localhost:8080/v3/api-docs. Endpoints document themselves with springdoc annotations as they're added. Both are on only in the `dev` profile, which `./mvnw spring-boot:run` activates ([`application-dev.properties`](backend/src/main/resources/application-dev.properties)); a packaged jar run without it doesn't publish them.
-- [`backend/http/`](backend/http): requests to try the API from IntelliJ's HTTP Client.
+- [`backend/bruno/`](backend/bruno): the [Bruno](https://www.usebruno.com) collection to try the API by hand, with a check on every request (see [Trying the API with Bruno](#trying-the-api-with-bruno)).
 - [Plans](docs/plans): the approved plan for each ticket.
 
 ## Code style

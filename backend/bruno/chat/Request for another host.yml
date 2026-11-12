@@ -1,0 +1,24 @@
+info:
+  name: Request for another host
+  type: http
+  seq: 8
+http:
+  method: post
+  url: "{{baseUrl}}/chat"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: Host
+      value: attacker.example
+      description: Pretends the request was addressed to another site (DNS rebinding). The backend must refuse it.
+  body:
+    type: json
+    data: |-
+      {
+        "question": "   "
+      }
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "403"

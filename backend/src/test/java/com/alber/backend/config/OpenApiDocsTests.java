@@ -38,6 +38,20 @@ class OpenApiDocsTests {
     }
 
     @Test
+    void chatEndpointIsDocumented() {
+        assertThat(mvc.get().uri("/v3/api-docs")).hasStatusOk().bodyJson().satisfies(json -> {
+            json.assertThat()
+                    .extractingPath("$.paths['/chat'].post.summary")
+                    .asString()
+                    .isNotBlank();
+            json.assertThat()
+                    .extractingPath("$.paths['/chat'].post.responses")
+                    .asMap()
+                    .containsKeys("200", "400", "503");
+        });
+    }
+
+    @Test
     void swaggerUiHtmlRedirectsToTheSwaggerUi() {
         assertThat(mvc.get().uri("/swagger-ui.html"))
                 .hasStatus(HttpStatus.FOUND)

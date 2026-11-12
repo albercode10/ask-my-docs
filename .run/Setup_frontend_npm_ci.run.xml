@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Setup: frontend npm ci" type="js.build_tools.npm" folderName="Setup">
+    <package-json value="$PROJECT_DIR$/frontend/package.json" />
+    <command value="ci" />
+    <node-interpreter value="project" />
+    <envs />
+    <method v="2" />
+  </configuration>
+</component>
