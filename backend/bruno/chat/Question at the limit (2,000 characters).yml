@@ -1,0 +1,27 @@
+info:
+  name: Question at the limit (2,000 characters)
+  type: http
+  seq: 7
+http:
+  method: post
+  url: "{{baseUrl}}/chat"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "question": "replaced before sending by a 2,000-character question"
+      }
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+  scripts:
+    - type: before-request
+      code: |-
+        req.setBody({ question: "a".repeat(2000) });
+settings:
+  timeout: 0

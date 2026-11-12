@@ -1,0 +1,33 @@
+info:
+  name: Valid question
+  type: http
+  seq: 1
+http:
+  method: post
+  url: "{{baseUrl}}/chat"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "question": "How should I trim a moustache?"
+      }
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+  scripts:
+    - type: tests
+      code: |-
+        test("answer is not blank", function() {
+          expect(res.body.answer).to.be.a("string");
+          expect(res.body.answer.trim()).to.not.equal("");
+        });
+        test("answer has no <think> reasoning", function() {
+          expect(res.body.answer).to.not.include("<think>");
+        });
+settings:
+  timeout: 0

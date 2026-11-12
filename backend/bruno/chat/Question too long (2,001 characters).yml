@@ -1,0 +1,30 @@
+info:
+  name: Question too long (2,001 characters)
+  type: http
+  seq: 6
+http:
+  method: post
+  url: "{{baseUrl}}/chat"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "question": "replaced before sending by a 2,001-character question"
+      }
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "400"
+  scripts:
+    - type: before-request
+      code: |-
+        req.setBody({ question: "a".repeat(2001) });
+    - type: tests
+      code: |-
+        test("error is a problem detail", function() {
+          expect(res.headers["content-type"]).to.include("application/problem+json");
+        });

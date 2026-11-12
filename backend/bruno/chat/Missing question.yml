@@ -1,0 +1,25 @@
+info:
+  name: Missing question
+  type: http
+  seq: 4
+http:
+  method: post
+  url: "{{baseUrl}}/chat"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {}
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "400"
+  scripts:
+    - type: tests
+      code: |-
+        test("error is a problem detail", function() {
+          expect(res.headers["content-type"]).to.include("application/problem+json");
+        });

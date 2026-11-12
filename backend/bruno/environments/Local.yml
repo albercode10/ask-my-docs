@@ -1,0 +1,7 @@
+name: Local
+variables:
+  - name: baseUrl
+    value: http://localhost:8080
+    enabled: true
+    secret: false
+    description: "The local backend, started with the IntelliJ configuration Backend - run (dev) or ./mvnw spring-boot:run in backend/."

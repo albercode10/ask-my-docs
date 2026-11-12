@@ -21,3 +21,6 @@ Thumbs.db
 
 # Claude Code per-user settings
 .claude/settings.local.json
+
+# Local data, e.g. the copyrighted book in data/books/ (ALB-30). Never commit it.
+/data/

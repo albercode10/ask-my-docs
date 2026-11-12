@@ -1,0 +1,30 @@
+info:
+  name: Question the book doesn't cover
+  type: http
+  seq: 2
+http:
+  method: post
+  url: "{{baseUrl}}/chat"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "question": "What is the capital of Australia?"
+      }
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+  scripts:
+    - type: tests
+      code: |-
+        test("answer is not blank", function() {
+          expect(res.body.answer).to.be.a("string");
+          expect(res.body.answer.trim()).to.not.equal("");
+        });
+settings:
+  timeout: 0

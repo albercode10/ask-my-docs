@@ -1,0 +1,29 @@
+info:
+  name: OpenAPI document
+  type: http
+  seq: 1
+http:
+  method: get
+  url: "{{baseUrl}}/v3/api-docs"
+  headers:
+    - name: Accept
+      value: application/json
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.info.title
+      operator: eq
+      value: ask-my-docs API
+  scripts:
+    - type: tests
+      code: |-
+        test("POST /chat is documented with 200, 400 and 503", function() {
+          const responses = res.body.paths["/chat"].post.responses;
+          expect(responses).to.have.all.keys("200", "400", "503");
+        });
+        test("question is limited to 2000 characters", function() {
+          const schemas = res.body.components.schemas;
+          expect(schemas.ChatRequest.properties.question.maxLength).to.equal(2000);
+        });
