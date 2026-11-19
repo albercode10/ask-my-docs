@@ -1,6 +1,9 @@
 package com.alber.backend.chat;
 
 import com.alber.backend.book.BookContext;
+import java.time.Duration;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -8,6 +11,8 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 /** Answers a question from the book through Spring AI's {@link ChatClient} and the configured Ollama model. */
 @Slf4j
@@ -23,9 +28,12 @@ class ChatService {
 
     private final BookContext bookContext;
 
-    ChatService(ChatClient.Builder chatClientBuilder, BookContext bookContext) {
+    private final Duration streamTimeout;
+
+    ChatService(ChatClient.Builder chatClientBuilder, BookContext bookContext, ChatProperties properties) {
         this.chatClient = chatClientBuilder.build();
         this.bookContext = bookContext;
+        this.streamTimeout = properties.streamTimeout();
     }
 
     /**
@@ -54,6 +62,46 @@ class ChatService {
             log.info("The answer reached the num-predict cap and was cut off.");
         }
         return answer;
+    }
+
+    /**
+     * The model's answer as it's generated, piece by piece, exactly as the model wrote it (no trimming). Empty pieces
+     * and {@code <think>} reasoning (with the whitespace right after it) are dropped. An answer with no visible text
+     * gives an empty stream, where {@link #answer} throws. The stream fails with a {@link TimeoutException} when the whole answer
+     * takes longer than {@code app.chat.stream-timeout}, and with the model's error when the model call fails.
+     * Cancelling it cancels the model call.
+     *
+     * @throws BookUnavailableException right away, before any stream exists, when no book is loaded
+     */
+    Flux<String> stream(String question) {
+        ChatClient.ChatClientRequestSpec request = prompt(question);
+        Flux<String> pieces = request.stream()
+                .chatResponse()
+                .doOnNext(ChatService::logIfCutOff)
+                .mapNotNull(response -> response.getResult() == null
+                        ? null
+                        : response.getResult().getOutput().getText());
+        return Flux.defer(() -> {
+            ThinkingFilter filter = new ThinkingFilter();
+            // One deadline for the whole answer, started at subscription (plain timeout(Duration) would only limit
+            // the gap between pieces). When the deadline fires, takeUntilOther cancels the model stream and
+            // completes, and the TimeoutException follows; when the answer ends first, it cancels the timer.
+            // (A deadline that signals an error instead would not cancel the model stream.)
+            AtomicBoolean timedOut = new AtomicBoolean();
+            Mono<Long> deadline = Mono.delay(streamTimeout).doOnNext(tick -> timedOut.set(true));
+            return pieces.map(filter::accept)
+                    .concatWith(Mono.fromSupplier(filter::finish))
+                    .filter(piece -> !piece.isEmpty())
+                    .takeUntilOther(deadline)
+                    .concatWith(Mono.defer(() -> timedOut.get() ? Mono.error(new TimeoutException()) : Mono.empty()));
+        });
+    }
+
+    private static void logIfCutOff(ChatResponse response) {
+        Generation result = response.getResult();
+        if (result != null && "length".equalsIgnoreCase(result.getMetadata().getFinishReason())) {
+            log.info("The streamed answer reached the num-predict cap and was cut off.");
+        }
     }
 
     /**

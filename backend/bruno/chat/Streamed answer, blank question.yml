@@ -1,0 +1,31 @@
+info:
+  name: Streamed answer, blank question
+  type: http
+  seq: 10
+docs: |-
+  Same validation as POST /chat: a blank question gives 400 with a problem detail, and no stream is opened.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/stream"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: Accept
+      value: text/event-stream
+  body:
+    type: json
+    data: |-
+      {
+        "question": "   "
+      }
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "400"
+  scripts:
+    - type: tests
+      code: |-
+        test("error is a problem detail", function() {
+          expect(res.headers["content-type"]).to.include("application/problem+json");
+        });

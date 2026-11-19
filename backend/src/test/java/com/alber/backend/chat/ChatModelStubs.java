@@ -11,6 +11,7 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
+import reactor.core.publisher.Flux;
 
 /** Helpers for tests that stub Spring AI's {@code ChatModel}. */
 final class ChatModelStubs {
@@ -35,6 +36,11 @@ final class ChatModelStubs {
     /** A model response whose only generation has the given text. */
     static ChatResponse answer(String text) {
         return new ChatResponse(List.of(new Generation(new AssistantMessage(text))));
+    }
+
+    /** A streamed model response: one {@code ChatResponse} per piece, in order. */
+    static Flux<ChatResponse> pieces(String... pieces) {
+        return Flux.fromArray(pieces).map(ChatModelStubs::answer);
     }
 
     /** The text of the prompt's message of the given type, joined if there are several. */
