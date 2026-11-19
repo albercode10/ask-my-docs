@@ -1,0 +1,48 @@
+info:
+  name: Streamed answer
+  type: http
+  seq: 9
+docs: |-
+  POST /chat/stream sends the answer as server-sent events while the model writes it: `token` events
+  ({"text": "..."}), then `done` ({}), or one `error` ({"message": "..."}) if the model fails or the
+  answer takes longer than app.chat.stream-timeout (5 minutes).
+
+  The first request after startup can take minutes while Ollama processes the whole book (the
+  background warm-up usually does it first); later ones start answering within seconds.
+
+  Click Cancel while tokens are arriving to close the connection: the backend stops reading the
+  model's answer and logs no error, and Ollama stops generating. A Cancel before the first token is
+  only noticed when that token arrives (the backend learns of a closed connection on its next write).
+http:
+  method: post
+  url: "{{baseUrl}}/chat/stream"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: Accept
+      value: text/event-stream
+  body:
+    type: json
+    data: |-
+      {
+        "question": "How should I trim a moustache?"
+      }
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+  scripts:
+    - type: tests
+      code: |-
+        const body = typeof res.body === "string" ? res.body : JSON.stringify(res.body);
+        test("streams token events and ends with done", function() {
+          expect(body).to.include("event:token");
+          expect(body).to.include("event:done");
+          expect(body).to.not.include("event:error");
+        });
+        test("answer has no <think> reasoning", function() {
+          expect(body).to.not.include("<think>");
+        });
+settings:
+  timeout: 0

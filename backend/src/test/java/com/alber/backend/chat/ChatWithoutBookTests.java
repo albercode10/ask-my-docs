@@ -15,8 +15,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
+import org.springframework.test.web.servlet.assertj.MvcTestResult;
 
-/** Without the book file the app still starts, and /chat says the book isn't loaded. */
+/** Without the book file the app still starts, and /chat and /chat/stream say the book isn't loaded. */
 @SpringBootTest(properties = "app.book.path=target/no-such-dir/missing-book.epub")
 @AutoConfigureMockMvc
 class ChatWithoutBookTests {
@@ -42,5 +43,29 @@ class ChatWithoutBookTests {
                 });
 
         verify(chatModel, never()).call(any(Prompt.class));
+    }
+
+    @Test
+    void streamReturns503WithTheSameBodyAsChatWhenTheBookIsMissing() {
+        String question = "{\"question\": \"What is a goatee?\"}";
+        MvcTestResult chat = mvc.post()
+                .uri("/chat")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(question)
+                .exchange();
+        MvcTestResult streamed = mvc.post()
+                .uri("/chat/stream")
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .content(question)
+                .exchange();
+
+        assertThat(streamed)
+                .hasStatus(HttpStatus.SERVICE_UNAVAILABLE)
+                .hasContentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON);
+        assertThat(ChatStreamEndpointTests.problemWithoutInstance(streamed))
+                .isEqualTo(ChatStreamEndpointTests.problemWithoutInstance(chat))
+                .containsEntry("title", "Book not loaded");
+        verify(chatModel, never()).stream(any(Prompt.class));
     }
 }

@@ -2,7 +2,7 @@
 
 Ask questions about your documents and get answers grounded in them, using a local LLM.
 
-> **Status:** early. The backend answers questions about one book at `POST /chat`, sending the whole book to the model with each question. Retrieval (RAG), uploads, streaming and the chat UI are **planned** and not built yet.
+> **Status:** early. The backend answers questions about one book at `POST /chat`, or streams the answer as it's written at `POST /chat/stream`, sending the whole book to the model with each question. Retrieval (RAG), uploads and the chat UI are **planned** and not built yet.
 
 ## Architecture
 
@@ -110,6 +110,20 @@ The backend listens on `127.0.0.1:8080` only (`server.address`): there's no auth
 curl -s localhost:8080/chat -H 'Content-Type: application/json' -d '{"question": "How do I trim a moustache?"}'
 ```
 
+`POST /chat/stream` takes the same body and gives the same 400 and 503 responses (no stream is opened), but sends the answer as [server-sent events](https://html.spec.whatwg.org/multipage/server-sent-events.html) while the model writes it. Each event's data is JSON, so spaces and line breaks survive:
+
+| Event | When | Data |
+| --- | --- | --- |
+| `token` | One per piece of the answer, in order | `{"text": "..."}` |
+| `done` | Once, after the last `token`; then the stream closes | `{}` |
+| `error` | Once, if the model fails or the answer takes longer than `app.chat.stream-timeout` (default 5 minutes) after the stream opened; then the stream closes, with no `done` | `{"message": "..."}` |
+
+Join the `text` of the `token` events to get the answer. An answer with no visible text (empty, or only `<think>` reasoning) gives `done` with no `token` events, where `/chat` answers 503. Closing the connection stops the model once tokens are flowing: the backend only notices a closed connection when it next writes an event, so a client that leaves before the first token (which can take minutes on a cold first request) leaves the model working until that token or the time limit. Try it from Bruno (**Chat → Streamed answer**; **Cancel** closes the stream), or from the terminal (`-N` prints events as they arrive):
+
+```bash
+curl -N localhost:8080/chat/stream -H 'Content-Type: application/json' -H 'Accept: text/event-stream' -d '{"question": "How do I trim a moustache?"}'
+```
+
 Frontend (served at http://localhost:4200):
 
 ```bash
@@ -150,7 +164,7 @@ The response panel shows the status, the body and the time. Each request also ca
 
 | Folder | Requests |
 | --- | --- |
-| Chat | Valid question, Question the book doesn't cover, Blank question, Missing question, Empty body, Question too long (2,001 characters), Question at the limit (2,000 characters), Request for another host |
+| Chat | Valid question, Question the book doesn't cover, Blank question, Missing question, Empty body, Question too long (2,001 characters), Question at the limit (2,000 characters), Request for another host, Streamed answer, Streamed answer, blank question |
 | API docs | OpenAPI document, Swagger UI |
 
 ## Testing
