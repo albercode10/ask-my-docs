@@ -8,7 +8,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Puts the book into Ollama's prompt cache right after startup, in the background, so the first question is fast.
+ * Loads the chat model into Ollama right after startup, in the background, so the first question doesn't wait for it.
  * Turned off with {@code app.chat.warm-up=false} (tests do). A failure only logs a warning.
  */
 @Slf4j
@@ -33,10 +33,10 @@ public class ChatWarmUp {
         try {
             chatService.warmUp();
             log.info(
-                    "Warmed up the model with the book in {} s",
+                    "Warmed up the chat model in {} s",
                     Duration.ofNanos(System.nanoTime() - start).toSeconds());
         } catch (BookUnavailableException e) {
-            log.info("No book loaded, so no warm-up.");
+            log.info("The book isn't indexed, so no warm-up.");
         } catch (RuntimeException e) {
             log.warn(
                     "Warm-up failed ({}). The first question will be slow. Is Ollama running with the model pulled?",

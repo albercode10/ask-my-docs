@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import com.alber.backend.book.KeywordEmbeddingModel;
 import com.alber.backend.book.TestEpubs;
 import com.alber.backend.chat.SseEvents.Event;
 import java.time.Duration;
@@ -14,12 +15,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.convention.TestBean;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import reactor.core.publisher.Flux;
@@ -39,6 +42,9 @@ class ChatStreamTimeoutTests {
 
     @MockitoBean
     private ChatModel chatModel;
+
+    @TestBean(methodName = KeywordEmbeddingModel.FACTORY)
+    private EmbeddingModel embeddingModel;
 
     @Test
     void answerThatDoesNotFinishInTimeGivesAnErrorEventAndCancelsTheModel() {

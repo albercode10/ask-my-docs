@@ -9,8 +9,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 /**
- * The whole book fits in the context window, the answer has no reasoning trace, and the model (with Ollama's prompt
- * cache) stays loaded between questions.
+ * The passages, question and answer fit in an 8k context window, the answer has no reasoning trace, and the model (with
+ * Ollama's prompt cache) stays loaded between questions.
  */
 @SpringBootTest
 class OllamaChatOptionsTests {
@@ -19,9 +19,9 @@ class OllamaChatOptionsTests {
     private OllamaChatProperties ollama;
 
     @Test
-    void ollamaUsesA32kContextWindowWithThinkingOffAndA30mKeepAlive() {
+    void ollamaUsesAn8kContextWindowWithThinkingOffAndA30mKeepAlive() {
         assertThat(ollama.getModel()).isEqualTo("qwen3:8b");
-        assertThat(ollama.getNumCtx()).isEqualTo(32768);
+        assertThat(ollama.getNumCtx()).isEqualTo(8192);
         assertThat(ollama.getThink()).isEqualTo(OllamaThinkProperties.FALSE);
         assertThat(ollama.getKeepAlive()).isEqualTo("30m");
     }

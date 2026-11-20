@@ -11,6 +11,7 @@ import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.alber.backend.book.KeywordEmbeddingModel;
 import com.alber.backend.book.TestEpubs;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -26,13 +28,14 @@ import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.convention.TestBean;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 
 /**
- * At startup, one background request puts the book into Ollama's prompt cache, so the first real question doesn't
- * pay for processing the whole book.
+ * At startup, one background request loads the chat model into Ollama's memory with the fixed instructions, so the
+ * first real question doesn't wait for the model to load.
  *
  * <p>The mocked model can't be stubbed before startup, so the startup trigger is checked on a spy of the service, and
  * the request itself by running the warm-up again once the model is stubbed. Each test gets a fresh context, since
@@ -62,27 +65,32 @@ class ChatWarmUpTests {
     @MockitoSpyBean
     private ChatService chatService;
 
+    @TestBean(methodName = KeywordEmbeddingModel.FACTORY)
+    private EmbeddingModel embeddingModel;
+
     @Test
     void warmUpRunsOnceAtStartup() {
         verify(chatService, timeout(WAIT_MS).times(1)).warmUp();
     }
 
     @Test
-    void warmUpSendsTheSameSystemPromptAsChat() {
+    void warmUpSendsTheInstructionsWithoutPassagesOrSearch() {
+        KeywordEmbeddingModel embeddings = (KeywordEmbeddingModel) embeddingModel;
         Prompt warmUpPrompt = runWarmUpAgainstAStubbedModel();
+
+        // Same start as every chat prompt, so Ollama can reuse it; no passages, and no question was embedded.
+        assertThat(textOf(warmUpPrompt, MessageType.SYSTEM)).isEqualTo(BookPrompt.instructions());
+        assertThat(embeddings.embeddedTexts())
+                .noneSatisfy(text -> assertThat(text).startsWith("search_query:"));
 
         when(chatModel.call(any(Prompt.class))).thenReturn(answer("An answer."));
         assertThat(mvc.post()
                         .uri("/chat")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"question\": \"What is a goatee?\"}"))
+                        .content("{\"question\": \"When were waxed moustaches popular?\"}"))
                 .hasStatusOk();
-
-        Prompt chatPrompt = lastPromptWithQuestion("What is a goatee?");
-        String warmUpSystem = textOf(warmUpPrompt, MessageType.SYSTEM);
-        assertThat(warmUpSystem).contains(TestEpubs.CHAPTER_ONE_MARKER);
-        // Byte-identical, so Ollama can reuse the cached prefix for the real question.
-        assertThat(textOf(chatPrompt, MessageType.SYSTEM)).isEqualTo(warmUpSystem);
+        assertThat(textOf(lastPromptWithQuestion("When were waxed moustaches popular?"), MessageType.SYSTEM))
+                .startsWith(BookPrompt.instructions());
     }
 
     @Test

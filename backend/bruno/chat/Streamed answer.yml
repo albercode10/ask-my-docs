@@ -7,8 +7,8 @@ docs: |-
   ({"text": "..."}), then `done` ({}), or one `error` ({"message": "..."}) if the model fails or the
   answer takes longer than app.chat.stream-timeout (5 minutes).
 
-  The first request after startup can take minutes while Ollama processes the whole book (the
-  background warm-up usually does it first); later ones start answering within seconds.
+  The answer is built from the passages of the book closest to the question, as for POST /chat. A
+  failure to embed the question also ends the stream with an `error` event.
 
   Click Cancel while tokens are arriving to close the connection: the backend stops reading the
   model's answer and logs no error, and Ollama stops generating. A Cancel before the first token is

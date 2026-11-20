@@ -12,7 +12,8 @@ class ChatExceptionHandler {
     ProblemDetail bookUnavailable() {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.SERVICE_UNAVAILABLE,
-                "The book isn't loaded, so there's nothing to answer from. See README → The book.");
+                "The book isn't loaded or indexed, so there's nothing to answer from. See the backend log and README → The"
+                        + " book.");
         problem.setTitle("Book not loaded");
         return problem;
     }

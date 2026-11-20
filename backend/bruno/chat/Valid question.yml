@@ -2,6 +2,14 @@ info:
   name: Valid question
   type: http
   seq: 1
+docs: |-
+  The backend finds the passages of the book closest to the question (at most app.retrieval.top-k,
+  scoring at least app.retrieval.similarity-threshold) and sends only those to the model.
+
+  To see which passages a question retrieved, run the backend with
+  --logging.level.com.alber.backend.book=debug: each search logs a line such as
+  "Retrieved 4 passages: [#46 (0.844), ...]" (chunk index and similarity). A question the book
+  answers, like this one, should retrieve at least one.
 http:
   method: post
   url: "{{baseUrl}}/chat"
@@ -12,7 +20,7 @@ http:
     type: json
     data: |-
       {
-        "question": "How should I trim a moustache?"
+        "question": "How do I wax a moustache?"
       }
 runtime:
   assertions:

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.alber.backend.book.KeywordEmbeddingModel;
 import com.alber.backend.book.TestEpubs;
 import com.alber.backend.chat.SseEvents.Event;
 import com.jayway.jsonpath.JsonPath;
@@ -28,6 +29,7 @@ import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -35,6 +37,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.convention.TestBean;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import org.springframework.test.web.servlet.assertj.MvcTestResult;
@@ -61,9 +64,13 @@ class ChatStreamEndpointTests {
     @MockitoBean
     private ChatModel chatModel;
 
+    @TestBean(methodName = KeywordEmbeddingModel.FACTORY)
+    private EmbeddingModel embeddingModel;
+
     @BeforeEach
     void stubModel() {
         stubDefaultOptions(chatModel);
+        ((KeywordEmbeddingModel) embeddingModel).reset();
     }
 
     @Test
@@ -162,7 +169,7 @@ class ChatStreamEndpointTests {
     }
 
     @Test
-    void systemPromptContainsTheInstructionsAndTheBookText() {
+    void systemPromptContainsTheClosestPassageAndNotTheUnrelatedOne() {
         when(chatModel.stream(any(Prompt.class))).thenReturn(pieces("An answer."));
 
         assertThat(stream("{\"question\": \"When were waxed moustaches popular?\"}"))
@@ -171,11 +178,37 @@ class ChatStreamEndpointTests {
         ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
         verify(chatModel).stream(prompt.capture());
         assertThat(textOf(prompt.getValue(), MessageType.SYSTEM))
-                .contains("only")
-                .containsIgnoringCase("book")
+                .startsWith(BookPrompt.instructions())
                 .contains(TestEpubs.CHAPTER_ONE_MARKER)
-                .contains(TestEpubs.CHAPTER_TWO_MARKER);
+                .doesNotContain(TestEpubs.CHAPTER_TWO_MARKER);
         assertThat(textOf(prompt.getValue(), MessageType.USER)).isEqualTo("When were waxed moustaches popular?");
+    }
+
+    @Test
+    void questionTheBookDoesNotCoverIsStreamedWithNoPassages() {
+        when(chatModel.stream(any(Prompt.class))).thenReturn(pieces("The book doesn't cover that."));
+
+        assertThat(SseEvents.names(events(stream("{\"question\": \"What is the capital of France?\"}"))))
+                .containsExactly("token", "done");
+
+        ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).stream(prompt.capture());
+        assertThat(textOf(prompt.getValue(), MessageType.SYSTEM)
+                        .substring(BookPrompt.instructions().length()))
+                .doesNotContain("<passage>");
+    }
+
+    @Test
+    void embeddingFailureAtQuestionTimeGivesAnErrorEvent() {
+        ((KeywordEmbeddingModel) embeddingModel).failQuestions();
+
+        MvcTestResult result = stream(QUESTION);
+
+        assertThat(result).hasStatusOk().hasContentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM);
+        List<Event> events = events(result);
+        assertThat(SseEvents.names(events)).containsExactly("error");
+        assertGenericErrorMessage(events.getFirst());
+        verify(chatModel, never()).stream(any(Prompt.class));
     }
 
     @Test

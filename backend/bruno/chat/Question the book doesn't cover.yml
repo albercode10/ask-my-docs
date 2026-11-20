@@ -2,6 +2,10 @@ info:
   name: Question the book doesn't cover
   type: http
   seq: 2
+docs: |-
+  No passage of the book scores above app.retrieval.similarity-threshold for this question, so the
+  prompt carries none and the model should say that the book doesn't cover it. With
+  --logging.level.com.alber.backend.book=debug the backend logs "Retrieved 0 passages: []".
 http:
   method: post
   url: "{{baseUrl}}/chat"
@@ -12,7 +16,7 @@ http:
     type: json
     data: |-
       {
-        "question": "What is the capital of Australia?"
+        "question": "What is the capital of France?"
       }
 runtime:
   assertions:

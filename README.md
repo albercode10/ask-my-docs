@@ -2,7 +2,7 @@
 
 Ask questions about your documents and get answers grounded in them, using a local LLM.
 
-> **Status:** early. The backend answers questions about one book at `POST /chat`, or streams the answer as it's written at `POST /chat/stream`, sending the whole book to the model with each question. Retrieval (RAG), uploads and the chat UI are **planned** and not built yet.
+> **Status:** early. The backend answers questions about one book at `POST /chat`, or streams the answer as it's written at `POST /chat/stream`, answering from the passages of the book closest to each question (retrieval with in-memory embeddings). Sources in answers, uploads and the chat UI are **planned** and not built yet.
 
 ## Architecture
 
@@ -10,7 +10,7 @@ Ask questions about your documents and get answers grounded in them, using a loc
 | --- | --- | --- |
 | `backend/` | Spring Boot 4.1, Spring AI 2.0, Java 21, Maven | REST API; talks to the LLM through Spring AI's Ollama starter |
 | `frontend/` | Angular 22 (standalone), Vitest | Web UI |
-| Ollama (local) | `qwen3:8b` at `http://localhost:11434` | Chat model, configured in `backend/src/main/resources/application.properties` (32k context, thinking off) |
+| Ollama (local) | `qwen3:8b` and `nomic-embed-text` at `http://localhost:11434` | Chat model (8k context, thinking off) and embedding model, configured in `backend/src/main/resources/application.properties` |
 | Postgres (Docker) | Postgres 18 + pgvector, [`compose.yaml`](compose.yaml) | Vector store for the RAG pipeline; not used by the backend yet (ALB-10) |
 
 How the parts fit together and how a question becomes an answer: [docs/architecture.md](docs/architecture.md).
@@ -19,10 +19,14 @@ How the parts fit together and how a question becomes an answer: [docs/architect
 
 - Java 21 (Temurin), pinned in [`.sdkmanrc`](.sdkmanrc). Maven comes with the wrapper, `./mvnw`. The backend build fails on any other Java version.
 - Node 26, pinned in [`frontend/.nvmrc`](frontend/.nvmrc), with the npm it bundles
-- [Ollama](https://ollama.com) running locally, with the model pulled:
+- [Ollama](https://ollama.com) running locally, with the chat and embedding models pulled:
 
   ```bash
   ollama pull qwen3:8b
+  ```
+
+  ```bash
+  ollama pull nomic-embed-text
   ```
 
 - The book's EPUB in `data/books/` (see [The book](#the-book)). Without it the backend still starts, but `/chat` answers 503.
@@ -89,9 +93,13 @@ The app answers questions about one book: *Gentleman's Guide to Beard and Mousta
 data/books/beard-and-moustache-management.epub
 ```
 
-The backend reads it at startup and logs `Loaded book …: N characters`. To use another path, set `app.book.path` (for example `APP_BOOK_PATH=/path/to/book.epub ./mvnw spring-boot:run`). A relative path resolves against `backend/`. If the file is missing or can't be read, the backend logs a warning, still starts, and `POST /chat` answers 503.
+The backend reads it at startup, chapter by chapter, and logs `Loaded book …: N chapters, N characters`. To use another path, set `app.book.path` (for example `APP_BOOK_PATH=/path/to/book.epub ./mvnw spring-boot:run`). A relative path resolves against `backend/`. If the file is missing or can't be read, the backend logs a warning, still starts, and `POST /chat` answers 503.
 
-The whole book (about 21k tokens) goes to the model with every question, so Ollama runs `qwen3:8b` with a 32k context window. That needs roughly 5 GB of memory on top of the model. Processing the book is slow (about 4.5 minutes measured on the development Mac), so the backend does it once in the background right after startup (`app.chat.warm-up`, logged as `Warmed up the model with the book in N s`), and Ollama keeps it in its prompt cache. After that, a question only pays for itself: about 2 s for a short answer, longer for a long one (generation runs at roughly 25 characters per second). The cache is lost when Ollama unloads the model, after 30 minutes idle (`spring.ai.ollama.chat.keep-alive`), so the first question after that is slow again.
+Then it **indexes the book** before it accepts requests: it splits each chapter into chunks of about 400 tokens, embeds every chunk with `nomic-embed-text` and keeps them in memory (Spring AI's `SimpleVectorStore`), with each chunk's chapter title (from the EPUB's table of contents) and its position in the book. It logs `Indexed N chunks from N chapters in N ms`: 56 chunks from 10 chapters in about 4.5 s on the development Mac. Nothing is saved to disk; every start indexes again. If Ollama isn't running or `nomic-embed-text` isn't pulled, the backend logs a warning saying which, still starts, and `/chat` and `/chat/stream` answer 503 until you fix it and restart.
+
+For each question, the backend embeds the question the same way and sends the model only the closest chunks: at most 4 (`app.retrieval.top-k`), each with a cosine similarity of at least 0.6 (`app.retrieval.similarity-threshold`). A question the book doesn't cover gets no chunks, and the model says the book doesn't cover it. Chunks and questions are embedded with the task prefixes `nomic-embed-text` expects (`search_document:` and `search_query:`). To see what a question retrieved, run the backend with `--logging.level.com.alber.backend.book=debug`: each search logs the chunk indexes and scores. The starting values and how they were checked are in [docs/plans/ALB-32.md](docs/plans/ALB-32.md).
+
+A prompt holds the instructions, a few chunks and the question, so Ollama runs `qwen3:8b` with an 8k context window. Right after startup the backend loads the chat model in the background (`app.chat.warm-up`, logged as `Warmed up the chat model in N s`), so the first question doesn't wait for it. A question then takes about 1 s for a short answer and several seconds for a long one (generation runs at roughly 25 characters per second). Ollama unloads both models after 30 minutes idle (`spring.ai.ollama.chat.keep-alive`, `spring.ai.ollama.embedding.keep-alive`), so the first question after that waits a few seconds for them to load.
 
 ## Running
 
@@ -104,7 +112,7 @@ cd backend
 
 The backend listens on `127.0.0.1:8080` only (`server.address`): there's no authentication yet, so other machines on the network can't use the local model or pull the book through `/chat`. It also answers only requests addressed to `localhost`, `127.0.0.1` or `[::1]`, and gives 403 to any other `Host`, so a web page in your browser can't reach it by pointing its own domain at 127.0.0.1 (DNS rebinding).
 
-`POST /chat` takes a question of at most 2,000 characters (longer gives 400), caps the answer at about 1,000 tokens (`spring.ai.ollama.chat.num-predict`), and answers 503 when the book isn't loaded or the model doesn't answer (Ollama down, the model not pulled, or an empty answer). Model calls aren't retried for long (`spring.ai.retry.*`), so that 503 comes within seconds. Ask a question from the [Bruno collection](#trying-the-api-with-bruno) (**Chat → Valid question**), or from the terminal:
+`POST /chat` takes a question of at most 2,000 characters (longer gives 400), caps the answer at about 1,000 tokens (`spring.ai.ollama.chat.num-predict`), and answers 503 when the book isn't loaded or indexed, or a model doesn't answer (Ollama down, a model not pulled, or an empty answer). Model calls aren't retried for long (`spring.ai.retry.*`), so that 503 comes within seconds. Ask a question from the [Bruno collection](#trying-the-api-with-bruno) (**Chat → Valid question**), or from the terminal:
 
 ```bash
 curl -s localhost:8080/chat -H 'Content-Type: application/json' -d '{"question": "How do I trim a moustache?"}'
@@ -116,9 +124,9 @@ curl -s localhost:8080/chat -H 'Content-Type: application/json' -d '{"question":
 | --- | --- | --- |
 | `token` | One per piece of the answer, in order | `{"text": "..."}` |
 | `done` | Once, after the last `token`; then the stream closes | `{}` |
-| `error` | Once, if the model fails or the answer takes longer than `app.chat.stream-timeout` (default 5 minutes) after the stream opened; then the stream closes, with no `done` | `{"message": "..."}` |
+| `error` | Once, if embedding the question or the model fails, or the answer takes longer than `app.chat.stream-timeout` (default 5 minutes) after the stream opened; then the stream closes, with no `done` | `{"message": "..."}` |
 
-Join the `text` of the `token` events to get the answer. An answer with no visible text (empty, or only `<think>` reasoning) gives `done` with no `token` events, where `/chat` answers 503. Closing the connection stops the model once tokens are flowing: the backend only notices a closed connection when it next writes an event, so a client that leaves before the first token (which can take minutes on a cold first request) leaves the model working until that token or the time limit. Try it from Bruno (**Chat → Streamed answer**; **Cancel** closes the stream), or from the terminal (`-N` prints events as they arrive):
+Join the `text` of the `token` events to get the answer. An answer with no visible text (empty, or only `<think>` reasoning) gives `done` with no `token` events, where `/chat` answers 503. Closing the connection stops the model once tokens are flowing: the backend only notices a closed connection when it next writes an event, so a client that leaves before the first token leaves the model working until that token or the time limit. Try it from Bruno (**Chat → Streamed answer**; **Cancel** closes the stream), or from the terminal (`-N` prints events as they arrive):
 
 ```bash
 curl -N localhost:8080/chat/stream -H 'Content-Type: application/json' -H 'Accept: text/event-stream' -d '{"question": "How do I trim a moustache?"}'
@@ -138,7 +146,7 @@ Every command in this README is also a shared run configuration in [`.run/`](.ru
 
 | Folder | Configurations |
 | --- | --- |
-| Setup (once) | git hooks, `ollama pull qwen3:8b`, frontend `npm ci` |
+| Setup (once) | git hooks, `ollama pull qwen3:8b`, `ollama pull nomic-embed-text`, frontend `npm ci` |
 | Run | **Run app (backend + frontend)**, Backend: run (dev), Frontend: start, Postgres: up / down |
 | Backend | test, verify (what CI runs), spotless apply, package |
 | Frontend | test (watch), test:ci, build, lint, format, format:check |
@@ -179,7 +187,7 @@ cd frontend && npm test
 
 `npm test` watches for changes; `npm run test:ci` runs the tests once, as CI does.
 
-The tests don't need Ollama or the book: they stub the model and read a small EPUB they generate. Ollama and the book are only needed to answer real chat requests.
+The tests don't need Ollama or the book: they stub the chat model, replace the embedding model with a keyword-based fake, and read a small EPUB they generate. Ollama and the book are only needed to answer real chat requests.
 
 Smoke tests for the local database. They need Docker running, and use a throwaway Compose project, port and credentials, so your database and `.env` are left alone:
 

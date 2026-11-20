@@ -1,8 +1,8 @@
 package com.alber.backend.chat;
 
 /**
- * The model call failed (Ollama down, model not pulled, …) or returned no answer. Mapped to 503 by
- * {@link ChatExceptionHandler}.
+ * Embedding the question or the model call failed (Ollama down, model not pulled, …), or the model returned no
+ * answer. Mapped to 503 by {@link ChatExceptionHandler}.
  */
 class ModelUnavailableException extends RuntimeException {
 

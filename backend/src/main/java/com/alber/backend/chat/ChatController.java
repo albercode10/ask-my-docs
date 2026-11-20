@@ -30,9 +30,10 @@ class ChatController {
             produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(
             summary = "Answer a question about the book",
-            description = "Sends the question, with the whole book as context, to the local Ollama model and returns"
-                    + " one complete answer. The model answers only from the book, and says so when the book doesn't"
-                    + " cover the question.")
+            description = "Finds the passages of the book closest to the question (embeddings indexed at startup),"
+                    + " sends them with the question to the local Ollama model and returns one complete answer. The"
+                    + " model answers only from those passages, and says so when the book doesn't cover the"
+                    + " question.")
     @ApiResponse(responseCode = "200", description = "The answer")
     @ApiResponse(
             responseCode = "400",
@@ -44,8 +45,8 @@ class ChatController {
                             schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(
             responseCode = "503",
-            description =
-                    "The book isn't loaded (no EPUB at app.book.path), or the model didn't answer (Ollama down or the model not pulled)",
+            description = "The book isn't loaded (no EPUB at app.book.path) or wasn't indexed at startup, or the model"
+                    + " didn't answer (Ollama down or a model not pulled)",
             content =
                     @Content(
                             mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
@@ -65,9 +66,8 @@ class ChatController {
                     + " `{\"text\": \"...\"}`, in order; then one `done` event, data `{}`, and the stream closes."
                     + " If the model fails or the answer takes longer than app.chat.stream-timeout (default 5"
                     + " minutes) after the stream opened, one `error` event, data `{\"message\": \"...\"}`, ends the"
-                    + " stream instead of `done`. An answer with no visible text gives `done` with no `token`"
-                    + " events. The first question after startup can take minutes while the model"
-                    + " processes the book.")
+                    + " stream instead of `done`; so does a failure to embed the question. An answer with no visible"
+                    + " text gives `done` with no `token` events.")
     @ApiResponse(
             responseCode = "200",
             description = "The answer as a stream of token events, then done (or error)",
@@ -82,7 +82,8 @@ class ChatController {
                             schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(
             responseCode = "503",
-            description = "The book isn't loaded (no EPUB at app.book.path). No stream is opened.",
+            description =
+                    "The book isn't loaded (no EPUB at app.book.path) or wasn't indexed at startup. No stream is opened.",
             content =
                     @Content(
                             mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,

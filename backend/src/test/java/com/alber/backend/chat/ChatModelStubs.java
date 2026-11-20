@@ -17,7 +17,7 @@ import reactor.core.publisher.Flux;
 final class ChatModelStubs {
 
     /** The context size the stubbed model reports as its default, like the real one configured in properties. */
-    static final int DEFAULT_NUM_CTX = 32768;
+    static final int DEFAULT_NUM_CTX = 8192;
 
     private ChatModelStubs() {}
 

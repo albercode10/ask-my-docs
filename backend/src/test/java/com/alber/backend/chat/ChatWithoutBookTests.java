@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -27,6 +29,21 @@ class ChatWithoutBookTests {
 
     @MockitoBean
     private ChatModel chatModel;
+
+    @MockitoBean
+    private EmbeddingModel embeddingModel;
+
+    @Test
+    void noBookMeansTheEmbeddingModelIsNeverCalled() {
+        assertThat(mvc.post()
+                        .uri("/chat")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\": \"What is a goatee?\"}"))
+                .hasStatus(HttpStatus.SERVICE_UNAVAILABLE);
+
+        // Nothing indexed at startup, nothing embedded per question.
+        verifyNoInteractions(embeddingModel);
+    }
 
     @Test
     void appStartsAndChatReturns503WhenTheBookIsMissing() {
